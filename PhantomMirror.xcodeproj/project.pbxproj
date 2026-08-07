@@ -1,0 +1,306 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1149217B71A94D09A926B3AE /* ImmersiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B013E1AABA814BC5AADF6227 /* ImmersiveView.swift */; };
+		24842030DCFA480AB61592FC /* TaskManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1756253FC9AF400B804EC260 /* TaskManager.swift */; };
+		52C616D2A2A1480B83F16283 /* MirrorTransform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6F8CFE04E441D598572C43 /* MirrorTransform.swift */; };
+		5633D2AC90AE465AA4E0A101 /* TrainingHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEF04CE05FAB4BBD8238D429 /* TrainingHUD.swift */; };
+		58792150E0284E5A8777AC31 /* SessionReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7B4571E18CA41E69A97F514 /* SessionReport.swift */; };
+		7B8A627A65624B8CAD28BFA5 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A70F368DEDC49D682BDD44B /* OnboardingView.swift */; };
+		8E563726383A4C14BC72B4A3 /* VirtualHandVisualizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF3EAAFD83E4237AA22EA9D /* VirtualHandVisualizer.swift */; };
+		991AEC39DD0347489D71750A /* ReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB76F33BE6184395B6EEFA4D /* ReportView.swift */; };
+		A32D5A427FAC42CD97F142E3 /* CalibrationPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22379AD3D5EC45DFBCD082A4 /* CalibrationPanel.swift */; };
+		B80F806F55E941C4A8452822 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3504900B7D84EF1ACDD0355 /* AppState.swift */; };
+		CAD6833123D14A168F926422 /* HandTrackingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8CFAE9E6DDF4A2AA9274C74 /* HandTrackingManager.swift */; };
+		E9AECD959E72412BBE850BB8 /* PhantomMirrorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4EB5C3BBF36473495937FAD /* PhantomMirrorApp.swift */; };
+		F5430A9EEF784AC5AC5148F5 /* CalibrationData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E58945771FB4AEB8BAC593E /* CalibrationData.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1756253FC9AF400B804EC260 /* TaskManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskManager.swift; sourceTree = "<group>"; };
+		1A6F8CFE04E441D598572C43 /* MirrorTransform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorTransform.swift; sourceTree = "<group>"; };
+		22379AD3D5EC45DFBCD082A4 /* CalibrationPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationPanel.swift; sourceTree = "<group>"; };
+		2AF3EAAFD83E4237AA22EA9D /* VirtualHandVisualizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualHandVisualizer.swift; sourceTree = "<group>"; };
+		2E58945771FB4AEB8BAC593E /* CalibrationData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationData.swift; sourceTree = "<group>"; };
+		3B4F5CA6C2814994BB0DB3BF /* PhantomMirror.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PhantomMirror.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3F95D5435A3D46B8B7DABCE1 /* PhantomMirror.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PhantomMirror.entitlements; sourceTree = "<group>"; };
+		6A70F368DEDC49D682BDD44B /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		A3504900B7D84EF1ACDD0355 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		A4EB5C3BBF36473495937FAD /* PhantomMirrorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhantomMirrorApp.swift; sourceTree = "<group>"; };
+		B013E1AABA814BC5AADF6227 /* ImmersiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmersiveView.swift; sourceTree = "<group>"; };
+		B7B4571E18CA41E69A97F514 /* SessionReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReport.swift; sourceTree = "<group>"; };
+		BB76F33BE6184395B6EEFA4D /* ReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportView.swift; sourceTree = "<group>"; };
+		C8CFAE9E6DDF4A2AA9274C74 /* HandTrackingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandTrackingManager.swift; sourceTree = "<group>"; };
+		E7DA53F4DCF34A888638F708 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		EEF04CE05FAB4BBD8238D429 /* TrainingHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingHUD.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		94A576677CFC47FBB75D7E65 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		01B5077B034C487FA8E68297 /* PhantomMirror */ = {
+			isa = PBXGroup;
+			children = (
+				A4EB5C3BBF36473495937FAD /* PhantomMirrorApp.swift */,
+				F3A871A724AC46C3AAEAAF16 /* Models */,
+				57E8A930D4D341D9B172E9F8 /* Immersive */,
+				661C40482A544E958ED06AD1 /* Views */,
+				E7DA53F4DCF34A888638F708 /* Info.plist */,
+				3F95D5435A3D46B8B7DABCE1 /* PhantomMirror.entitlements */,
+			);
+			path = PhantomMirror;
+			sourceTree = "<group>";
+		};
+		57E8A930D4D341D9B172E9F8 /* Immersive */ = {
+			isa = PBXGroup;
+			children = (
+				1A6F8CFE04E441D598572C43 /* MirrorTransform.swift */,
+				C8CFAE9E6DDF4A2AA9274C74 /* HandTrackingManager.swift */,
+				2AF3EAAFD83E4237AA22EA9D /* VirtualHandVisualizer.swift */,
+				1756253FC9AF400B804EC260 /* TaskManager.swift */,
+			);
+			path = Immersive;
+			sourceTree = "<group>";
+		};
+		661C40482A544E958ED06AD1 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				B013E1AABA814BC5AADF6227 /* ImmersiveView.swift */,
+				6A70F368DEDC49D682BDD44B /* OnboardingView.swift */,
+				22379AD3D5EC45DFBCD082A4 /* CalibrationPanel.swift */,
+				EEF04CE05FAB4BBD8238D429 /* TrainingHUD.swift */,
+				BB76F33BE6184395B6EEFA4D /* ReportView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		C3858543130A420386F09DF1 = {
+			isa = PBXGroup;
+			children = (
+				01B5077B034C487FA8E68297 /* PhantomMirror */,
+				F1B82E9A91C54A2FAECCB8CC /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		F1B82E9A91C54A2FAECCB8CC /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3B4F5CA6C2814994BB0DB3BF /* PhantomMirror.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		F3A871A724AC46C3AAEAAF16 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A3504900B7D84EF1ACDD0355 /* AppState.swift */,
+				2E58945771FB4AEB8BAC593E /* CalibrationData.swift */,
+				B7B4571E18CA41E69A97F514 /* SessionReport.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		53AD83400FEA486B92B22F1A /* PhantomMirror */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A6DEF213C146419FAF70AB15 /* Build configuration list for PBXNativeTarget "PhantomMirror" */;
+			buildPhases = (
+				DE1EA54C1E5B44CBA1A03E82 /* Sources */,
+				94A576677CFC47FBB75D7E65 /* Frameworks */,
+				E4D19C98937F4E3EBF58DD06 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PhantomMirror;
+			productName = PhantomMirror;
+			productReference = 3B4F5CA6C2814994BB0DB3BF /* PhantomMirror.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		9FC20360222F49DA84687DBE /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = 98575E59732C4ABAB611CF73 /* Build configuration list for PBXProject "PhantomMirror" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = C3858543130A420386F09DF1;
+			productRefGroup = F1B82E9A91C54A2FAECCB8CC /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				53AD83400FEA486B92B22F1A /* PhantomMirror */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E4D19C98937F4E3EBF58DD06 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		DE1EA54C1E5B44CBA1A03E82 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E9AECD959E72412BBE850BB8 /* PhantomMirrorApp.swift in Sources */,
+				B80F806F55E941C4A8452822 /* AppState.swift in Sources */,
+				F5430A9EEF784AC5AC5148F5 /* CalibrationData.swift in Sources */,
+				58792150E0284E5A8777AC31 /* SessionReport.swift in Sources */,
+				52C616D2A2A1480B83F16283 /* MirrorTransform.swift in Sources */,
+				CAD6833123D14A168F926422 /* HandTrackingManager.swift in Sources */,
+				8E563726383A4C14BC72B4A3 /* VirtualHandVisualizer.swift in Sources */,
+				24842030DCFA480AB61592FC /* TaskManager.swift in Sources */,
+				1149217B71A94D09A926B3AE /* ImmersiveView.swift in Sources */,
+				7B8A627A65624B8CAD28BFA5 /* OnboardingView.swift in Sources */,
+				A32D5A427FAC42CD97F142E3 /* CalibrationPanel.swift in Sources */,
+				5633D2AC90AE465AA4E0A101 /* TrainingHUD.swift in Sources */,
+				991AEC39DD0347489D71750A /* ReportView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		2766FD2CE35F498ABA2B8329 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PhantomMirror/PhantomMirror.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PT88AW8LKZ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PhantomMirror/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.phantommirror.demo;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "xros xrsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 7;
+			};
+			name = Debug;
+		};
+		2FCCBAEC1DF34288BE1ED080 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = xros;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				XROS_DEPLOYMENT_TARGET = 2.0;
+			};
+			name = Debug;
+		};
+		A48C811C5124484FA52F43E0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = xros;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				XROS_DEPLOYMENT_TARGET = 2.0;
+			};
+			name = Release;
+		};
+		AE1D89149B25447EBF0EA454 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PhantomMirror/PhantomMirror.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PT88AW8LKZ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PhantomMirror/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.phantommirror.demo;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "xros xrsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 7;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		98575E59732C4ABAB611CF73 /* Build configuration list for PBXProject "PhantomMirror" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2FCCBAEC1DF34288BE1ED080 /* Debug */,
+				A48C811C5124484FA52F43E0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A6DEF213C146419FAF70AB15 /* Build configuration list for PBXNativeTarget "PhantomMirror" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2766FD2CE35F498ABA2B8329 /* Debug */,
+				AE1D89149B25447EBF0EA454 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 9FC20360222F49DA84687DBE /* Project object */;
+}
