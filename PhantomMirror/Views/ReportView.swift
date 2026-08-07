@@ -48,7 +48,7 @@ struct ReportView: View {
             metric("Duration", String(format: "%.0fs", s.durationSeconds))
             metric("Tasks done", "\(s.tasksCompleted)/\(s.totalTasks)")
             metric("Tracking", String(format: "%.0f%%", s.trackingSuccessRate * 100))
-            metric("Avg latency", String(format: "%.0f ms", s.averageLatencyMs))
+            metric("Hand update", String(format: "%.0f ms", s.averageHandUpdateIntervalMs))
             metric("NRS before", "\(s.prePainNRS)")
             metric("NRS after", "\(s.postPainNRS)")
         }

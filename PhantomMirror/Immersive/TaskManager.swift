@@ -37,6 +37,7 @@ final class TaskManager {
     private(set) var current: TaskKind = .openClose
     private(set) var isComplete = false
     private(set) var progressText: String = ""
+    private var phantomIsLeft = false
 
     // Open/Close
     private var openCloseCycles = 0
@@ -55,6 +56,10 @@ final class TaskManager {
     private var cyanCube: ModelEntity?
     private var amberCube: ModelEntity?
     private var cubesJoined = false
+
+    func configure(phantomIsLeft: Bool) {
+        self.phantomIsLeft = phantomIsLeft
+    }
 
     func resetAll() {
         current = .openClose
@@ -170,10 +175,11 @@ final class TaskManager {
 
     private func spawnOrbs() {
         clearOrbs()
+        let side: Float = phantomIsLeft ? -1 : 1
         let positions: [SIMD3<Float>] = [
-            SIMD3(0.15, 1.2, -0.45),
-            SIMD3(0.28, 1.35, -0.35),
-            SIMD3(0.08, 1.45, -0.55)
+            SIMD3(side * 0.15, 1.2, -0.45),
+            SIMD3(side * 0.28, 1.35, -0.35),
+            SIMD3(side * 0.08, 1.45, -0.55)
         ]
         for (i, pos) in positions.enumerated() {
             let mat = SimpleMaterial(color: .systemOrange, roughness: 0.2, isMetallic: false)
@@ -195,18 +201,20 @@ final class TaskManager {
 
     private func spawnCubes() {
         clearCubes()
+        let phantomX: Float = phantomIsLeft ? -0.18 : 0.18
+        let intactX = -phantomX
         let cyan = ModelEntity(
             mesh: .generateBox(size: 0.05, cornerRadius: 0.005),
             materials: [SimpleMaterial(color: .cyan, isMetallic: false)]
         )
-        cyan.position = SIMD3(-0.18, 1.2, -0.4)
+        cyan.position = SIMD3(intactX, 1.2, -0.4)
         cyan.name = "cyanCube"
 
         let amber = ModelEntity(
             mesh: .generateBox(size: 0.05, cornerRadius: 0.005),
             materials: [SimpleMaterial(color: .systemOrange, isMetallic: false)]
         )
-        amber.position = SIMD3(0.18, 1.2, -0.4)
+        amber.position = SIMD3(phantomX, 1.2, -0.4)
         amber.name = "amberCube"
 
         cubeRoot.addChild(cyan)

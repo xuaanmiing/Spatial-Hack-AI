@@ -46,7 +46,7 @@ final class AppState {
 
     /// Live status for HUD.
     var trackingStatus: String = "Waiting for hand tracking…"
-    var syncLatencyMs: Double = 0
+    var handUpdateIntervalMs: Double = 0
     var currentTaskIndex: Int = 0
     var taskInstruction: String = ""
 
@@ -55,6 +55,7 @@ final class AppState {
         currentTaskIndex = 0
         taskInstruction = ""
         trackingStatus = "Waiting for hand tracking…"
+        handUpdateIntervalMs = 0
     }
 
     func beginCalibration() {
@@ -63,9 +64,10 @@ final class AppState {
     }
 
     func beginTraining() {
+        let baselinePain = session.prePainNRS
         resetSession()
         session.startedAt = Date()
-        session.prePainNRS = session.prePainNRS
+        session.prePainNRS = baselinePain
         phase = .training
         immersiveOpen = true
         currentTaskIndex = 0

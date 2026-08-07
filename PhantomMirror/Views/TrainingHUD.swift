@@ -13,7 +13,7 @@ struct TrainingHUD: View {
                     .padding(.vertical, 4)
                     .background(.blue.opacity(0.25), in: Capsule())
                 Spacer()
-                Text(String(format: "%.0f ms", appState.syncLatencyMs))
+                Text(String(format: "%.0f ms/update", appState.handUpdateIntervalMs))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }

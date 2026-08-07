@@ -4,21 +4,23 @@ import ARKit
 import simd
 import UIKit
 
-/// Procedural hand visualization: joint spheres + bone cylinders.
-/// Used for both intact (1:1) and phantom (mirrored) hands so the demo runs without a USDZ asset.
+/// Procedural hand visualization: large unlit joint spheres + bone cylinders (demo-visible).
 @MainActor
 final class VirtualHandVisualizer {
     let root = Entity()
     private var jointEntities: [HandSkeleton.JointName: ModelEntity] = [:]
     private var boneEntities: [String: ModelEntity] = [:]
 
-    private let jointRadius: Float = 0.008
-    private let boneRadius: Float = 0.0035
-    private let material: SimpleMaterial
-    private let boneMaterial: SimpleMaterial
+    /// Larger than real joints so the demo is obvious in passthrough.
+    private let jointRadius: Float = 0.014
+    private let boneRadius: Float = 0.006
+    private let jointMaterial: UnlitMaterial
+    private let boneMaterial: UnlitMaterial
 
-    /// Parent pairs for drawing bones (child → parent).
     private static let bonePairs: [(HandSkeleton.JointName, HandSkeleton.JointName)] = [
+        (.wrist, .forearmWrist),
+        (.forearmWrist, .forearmArm),
+
         (.thumbKnuckle, .wrist),
         (.thumbIntermediateBase, .thumbKnuckle),
         (.thumbIntermediateTip, .thumbIntermediateBase),
@@ -51,15 +53,13 @@ final class VirtualHandVisualizer {
 
     init(name: String, color: UIColor) {
         root.name = name
-        material = SimpleMaterial(color: color, isMetallic: false)
-        var bone = SimpleMaterial(color: color.withAlphaComponent(0.85), isMetallic: false)
-        bone.roughness = 0.6
-        boneMaterial = bone
+        jointMaterial = UnlitMaterial(color: color)
+        boneMaterial = UnlitMaterial(color: color.withAlphaComponent(0.9))
 
         for jointName in HandSkeleton.JointName.allCases {
             let sphere = ModelEntity(
                 mesh: .generateSphere(radius: jointRadius),
-                materials: [material]
+                materials: [jointMaterial]
             )
             sphere.name = "\(name)-\(jointName)"
             sphere.isEnabled = false
@@ -84,26 +84,37 @@ final class VirtualHandVisualizer {
         root.isEnabled = visible
     }
 
-    /// Update all joints from world-space transforms keyed by joint name.
     func update(worldTransforms: [HandSkeleton.JointName: simd_float4x4], scale: Float = 1.0) {
-        root.scale = SIMD3(repeating: scale)
-
-        for (name, transform) in worldTransforms {
-            guard let entity = jointEntities[name] else { continue }
-            entity.isEnabled = true
-            entity.transform = Transform(matrix: transform)
+        root.scale = .one
+        let clampedScale = max(0.01, abs(scale))
+        let pivot = worldTransforms[.wrist]?.translation
+        let displayedTransforms: [HandSkeleton.JointName: simd_float4x4]
+        if let pivot, abs(clampedScale - 1) > 0.0001 {
+            displayedTransforms = worldTransforms.mapValues { transform in
+                var scaled = transform
+                let position = pivot + (transform.translation - pivot) * clampedScale
+                scaled.columns.3 = SIMD4(position.x, position.y, position.z, 1)
+                return scaled
+            }
+        } else {
+            displayedTransforms = worldTransforms
         }
 
-        // Disable missing joints.
-        for (name, entity) in jointEntities where worldTransforms[name] == nil {
+        for (name, transform) in displayedTransforms {
+            guard let entity = jointEntities[name] else { continue }
+            entity.isEnabled = true
+            entity.setTransformMatrix(transform, relativeTo: nil)
+        }
+
+        for (name, entity) in jointEntities where displayedTransforms[name] == nil {
             entity.isEnabled = false
         }
 
         for (child, parent) in Self.bonePairs {
             let key = "\(child)-\(parent)"
             guard let bone = boneEntities[key],
-                  let childT = worldTransforms[child],
-                  let parentT = worldTransforms[parent] else {
+                  let childT = displayedTransforms[child],
+                  let parentT = displayedTransforms[parent] else {
                 boneEntities[key]?.isEnabled = false
                 continue
             }
@@ -119,28 +130,21 @@ final class VirtualHandVisualizer {
             }
 
             bone.isEnabled = true
-            bone.position = mid
-            bone.scale = SIMD3(1, length, 1)
-
-            // Orient cylinder (default Y-up) along `dir`.
+            // Build a world transform for the cylinder (Y-up mesh → along dir).
             let y = simd_normalize(dir)
             let arbitrary: SIMD3<Float> = abs(y.y) < 0.99 ? SIMD3(0, 1, 0) : SIMD3(1, 0, 0)
             let x = simd_normalize(simd_cross(arbitrary, y))
             let z = simd_cross(x, y)
-            bone.orientation = simd_quatf(simd_float3x3(columns: (x, y, z)))
+            let matrix = simd_float4x4(columns: (
+                SIMD4(x.x, x.y, x.z, 0),
+                SIMD4(y.x * length, y.y * length, y.z * length, 0),
+                SIMD4(z.x, z.y, z.z, 0),
+                SIMD4(mid.x, mid.y, mid.z, 1)
+            ))
+            bone.setTransformMatrix(matrix, relativeTo: nil)
         }
     }
 
-    func tipPosition(of joint: HandSkeleton.JointName = .indexFingerTip) -> SIMD3<Float>? {
-        guard let entity = jointEntities[joint], entity.isEnabled else { return nil }
-        return entity.position(relativeTo: nil)
-    }
-
-    func wristPosition() -> SIMD3<Float>? {
-        tipPosition(of: .wrist)
-    }
-
-    /// Approximate grip openness: average fingertip distance to wrist (meters).
     func gripOpenness(from worldTransforms: [HandSkeleton.JointName: simd_float4x4]) -> Float? {
         guard let wrist = worldTransforms[.wrist]?.translation else { return nil }
         let tips: [HandSkeleton.JointName] = [

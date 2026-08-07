@@ -10,7 +10,7 @@ struct SessionReport: Codable, Equatable {
     var framesLost: Int = 0
     var tasksCompleted: Int = 0
     var totalTasks: Int = 3
-    var averageLatencyMs: Double = 0
+    var averageHandUpdateIntervalMs: Double = 0
 
     var durationSeconds: TimeInterval {
         guard let start = startedAt else { return 0 }

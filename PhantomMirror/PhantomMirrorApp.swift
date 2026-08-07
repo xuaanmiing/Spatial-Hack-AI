@@ -5,6 +5,7 @@ struct PhantomMirrorApp: App {
     @State private var appState = AppState()
     @State private var handTracker = HandTrackingManager()
     @State private var tasks = TaskManager()
+    @State private var handScene = HandSceneController()
 
     var body: some Scene {
         WindowGroup {
@@ -12,6 +13,7 @@ struct PhantomMirrorApp: App {
                 .environment(appState)
                 .environment(handTracker)
                 .environment(tasks)
+                .environment(handScene)
         }
         .windowStyle(.automatic)
         .defaultSize(width: 520, height: 720)
@@ -21,6 +23,7 @@ struct PhantomMirrorApp: App {
                 .environment(appState)
                 .environment(handTracker)
                 .environment(tasks)
+                .environment(handScene)
         }
         .immersionStyle(selection: .constant(.mixed), in: .mixed)
     }
@@ -55,9 +58,17 @@ struct RootView: View {
         .onChange(of: appState.immersiveOpen) { _, open in
             Task {
                 if open {
-                    let result = await openImmersiveSpace(id: "PhantomMirrorSpace")
-                    if case .error = result {
+                    switch await openImmersiveSpace(id: "PhantomMirrorSpace") {
+                    case .opened:
+                        appState.trackingStatus = "Immersive space opened — hold intact hand in view"
+                    case .userCancelled:
+                        appState.trackingStatus = "Immersive space cancelled"
+                        appState.immersiveOpen = false
+                    case .error:
                         appState.trackingStatus = "Failed to open Immersive Space"
+                        appState.immersiveOpen = false
+                    @unknown default:
+                        appState.trackingStatus = "Unknown Immersive Space result"
                         appState.immersiveOpen = false
                     }
                 } else {

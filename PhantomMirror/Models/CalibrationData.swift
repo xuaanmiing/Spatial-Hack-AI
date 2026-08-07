@@ -2,7 +2,7 @@ import Foundation
 import simd
 
 struct CalibrationData: Codable, Equatable {
-    /// Offset applied after mirroring, in meters (world space).
+    /// Head-yaw-relative offset applied after mirroring, in meters.
     var phantomOffset: SIMD3<Float> = .zero
 
     /// Uniform scale of the phantom hand (telescoping compensation).

@@ -2,7 +2,7 @@
 
 > Spatial Mirror Therapy for Phantom Limb Pain — reimagined for Apple Vision Pro.
 
-PhantomMirror is a visionOS application that modernises **Dr. V.S. Ramachandran's Mirror Box Therapy** into a mobile, spatial rehabilitation tool for stroke survivors and amputees suffering from **Phantom Limb Pain (PLP)**. Operating in Passthrough mode, the app tracks the user's intact arm in real time, mirrors its motion across the body's central axis, and projects a synchronized virtual limb onto the missing side — restoring the visual-motor feedback loop the brain needs to resolve pain.
+PhantomMirror is a visionOS demonstration that adapts **Dr. V.S. Ramachandran's Mirror Box Therapy** for spatial computing. In Passthrough mode, it tracks the user's intact hand and short forearm, mirrors their ARKit joint motion across the body's central axis, and renders a synchronized virtual counterpart on the missing side.
 
 ---
 
@@ -19,7 +19,7 @@ The clinical gold standard is **Mirror Box Therapy** — a neuroplasticity inter
 
 ## Our Solution
 
-PhantomMirror runs on **Apple Vision Pro** and uses spatial computing to place a fully 3D, real-time mirrored limb into the patient's actual physical space. The patient moves their intact hand — the virtual phantom hand moves in perfect sync on the opposite side, exactly where the missing limb would be.
+PhantomMirror runs on **Apple Vision Pro** and places a real-time 3D mirrored hand and short forearm into the user's physical space. It does not currently estimate or render the elbow, upper arm, or shoulder.
 
 This restores visual feedback to the somatosensory cortex, promotes neuroplasticity, and relieves pain — while capturing rich clinical telemetry that has never before been possible in mirror therapy.
 
@@ -28,10 +28,10 @@ This restores visual feedback to the somatosensory cortex, promotes neuroplastic
 ## Key Features
 
 - **Passthrough Spatial Mirroring** — Virtual limb rendered directly into the user's real environment via Vision Pro Passthrough.
-- **Real-time Hand Tracking** — Sub-frame latency joint tracking using visionOS `HandTrackingProvider`.
+- **Real-time Hand Tracking** — Joint updates using visionOS `HandTrackingProvider`.
 - **Central-axis Coordinate Transformation** — Mathematically mirrored joint positions and rotations across the user's body midline.
-- **Clinical Telemetry Pipeline** — Logs range of motion, joint angles, movement velocity, and session frequency.
-- **AI-generated Progress Reports** — LLM layer synthesizes telemetry + patient-reported pain scores into structured clinical reports for physiotherapists.
+- **Three Guided Demo Tasks** — Open/close, touch targets, and bilateral matching.
+- **Session Summary** — In-memory task, tracking-update, duration, and optional NRS values.
 - **No 3D World-building Required** — Runs in Passthrough, keeping development focused on the therapy engine.
 
 ---
@@ -50,11 +50,10 @@ Intact Hand Joint (x, y, z)  →  Mirror across body axis  →  Phantom Hand Joi
 - Passthrough rendering via `ImmersiveSpace` in mixed immersion style
 - Skeletal 3D hand mesh with skinning weights aligned to visionOS joint hierarchy
 
-### 3. AI Telemetry & Clinical Reporting
-- Session-level telemetry logged to structured storage
-- Metrics: range of motion (per joint), angular velocity, session duration, movement symmetry
-- LLM layer (via API) ingests telemetry + patient-reported pain scores (VAS)
-- Outputs structured clinical progress reports and trend analytics
+### 3. Session Reporting
+- In-memory session duration, task count, tracking success, and hand-update interval
+- Optional pre/post NRS values
+- Persistent telemetry, trend analytics, and LLM reports remain roadmap items
 
 ---
 
@@ -68,7 +67,7 @@ Intact Hand Joint (x, y, z)  →  Mirror across body axis  →  Phantom Hand Joi
 | Hand Tracking | ARKit `HandTrackingProvider` |
 | UI | SwiftUI |
 | Data | Swift Concurrency + Codable telemetry logs |
-| AI Layer | LLM API for report generation |
+| Reporting | In-memory Swift model (persistent/AI reporting planned) |
 | Tooling | Xcode 16+ |
 
 ---
@@ -114,7 +113,7 @@ open PhantomMirror.xcodeproj
 3. Enter the immersive session — a virtual limb will appear where your missing/affected limb would be.
 4. Move your intact hand slowly — the phantom limb mirrors your motion in real time.
 5. At session end, log your pain score (0–10 VAS).
-6. Review the AI-generated progress report from the dashboard.
+6. Review the local session summary.
 
 ---
 
