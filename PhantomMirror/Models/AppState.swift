@@ -123,13 +123,13 @@ final class AppState {
 
     func finishTraining() {
         session.endedAt = Date()
-        immersiveOpen = false
         phase = .report
+        immersiveOpen = false
     }
 
     func returnToOnboarding() {
-        immersiveOpen = false
         phase = .onboarding
+        immersiveOpen = false
         resetSession()
     }
 }

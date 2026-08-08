@@ -3,6 +3,7 @@ import RealityKit
 import simd
 import UIKit
 import ARKit
+import QuartzCore
 
 @MainActor
 @Observable
@@ -49,7 +50,41 @@ final class TaskManager {
     // Touch orbs
     let orbRoot = Entity()
     private var orbs: [ModelEntity] = []
+    private var orbBasePositions: [String: SIMD3<Float>] = [:]
+    private var orbTouchedAt: [String: CFTimeInterval] = [:]
     private var orbsTouched = 0
+    private let orbRadius: Float = 0.03
+    private let handVolumeRadius: Float = 0.035
+    private let orbVibrationDuration: CFTimeInterval = 0.28
+
+    private static let contactBonePairs: [(HandSkeleton.JointName, HandSkeleton.JointName)] = [
+        (.wrist, .forearmWrist),
+        (.forearmWrist, .forearmArm),
+        (.thumbKnuckle, .wrist),
+        (.thumbIntermediateBase, .thumbKnuckle),
+        (.thumbIntermediateTip, .thumbIntermediateBase),
+        (.thumbTip, .thumbIntermediateTip),
+        (.indexFingerMetacarpal, .wrist),
+        (.indexFingerKnuckle, .indexFingerMetacarpal),
+        (.indexFingerIntermediateBase, .indexFingerKnuckle),
+        (.indexFingerIntermediateTip, .indexFingerIntermediateBase),
+        (.indexFingerTip, .indexFingerIntermediateTip),
+        (.middleFingerMetacarpal, .wrist),
+        (.middleFingerKnuckle, .middleFingerMetacarpal),
+        (.middleFingerIntermediateBase, .middleFingerKnuckle),
+        (.middleFingerIntermediateTip, .middleFingerIntermediateBase),
+        (.middleFingerTip, .middleFingerIntermediateTip),
+        (.ringFingerMetacarpal, .wrist),
+        (.ringFingerKnuckle, .ringFingerMetacarpal),
+        (.ringFingerIntermediateBase, .ringFingerKnuckle),
+        (.ringFingerIntermediateTip, .ringFingerIntermediateBase),
+        (.ringFingerTip, .ringFingerIntermediateTip),
+        (.littleFingerMetacarpal, .wrist),
+        (.littleFingerKnuckle, .littleFingerMetacarpal),
+        (.littleFingerIntermediateBase, .littleFingerKnuckle),
+        (.littleFingerIntermediateTip, .littleFingerIntermediateBase),
+        (.littleFingerTip, .littleFingerIntermediateTip)
+    ]
 
     // Bimanual
     let cubeRoot = Entity()
@@ -123,20 +158,82 @@ final class TaskManager {
         }
     }
 
-    func updateTouchOrbs(phantomIndexTip: SIMD3<Float>?) {
-        guard current == .touchOrbs, let tip = phantomIndexTip else { return }
+    func updateTouchOrbs(phantomWorld: [HandSkeleton.JointName: simd_float4x4]) {
+        guard current == .touchOrbs, !phantomWorld.isEmpty else { return }
+        let now = CACurrentMediaTime()
+
         for orb in orbs where orb.isEnabled {
-            let dist = simd_distance(tip, orb.position(relativeTo: nil))
-            if dist < 0.04 {
-                orb.isEnabled = false
+            if let touchedAt = orbTouchedAt[orb.name] {
+                animateTouchedOrb(orb, touchedAt: touchedAt, now: now)
+                continue
+            }
+
+            let center = orb.position(relativeTo: nil)
+            if handVolumeIntersectsOrb(phantomWorld: phantomWorld, orbCenter: center) {
+                orbTouchedAt[orb.name] = now
                 orbsTouched += 1
                 progressText = "Orbs: \(orbsTouched) / 3"
+                orb.model?.materials = [UnlitMaterial(color: .systemYellow)]
+                animateTouchedOrb(orb, touchedAt: now, now: now)
                 if orbsTouched >= 3 {
                     isComplete = true
                     progressText = "Task complete ✓"
                 }
             }
         }
+    }
+
+    private func animateTouchedOrb(_ orb: ModelEntity, touchedAt: CFTimeInterval, now: CFTimeInterval) {
+        let elapsed = now - touchedAt
+        guard elapsed < orbVibrationDuration else {
+            orb.isEnabled = false
+            return
+        }
+
+        let base = orbBasePositions[orb.name] ?? orb.position
+        let decay = Float(1 - elapsed / orbVibrationDuration)
+        let shake = sinf(Float(elapsed) * 95) * 0.012 * decay
+        orb.position = base + SIMD3(shake, -shake * 0.45, shake * 0.25)
+        orb.scale = SIMD3(repeating: 1 + 0.35 * decay)
+    }
+
+    private func handVolumeIntersectsOrb(
+        phantomWorld: [HandSkeleton.JointName: simd_float4x4],
+        orbCenter: SIMD3<Float>
+    ) -> Bool {
+        let threshold = orbRadius + handVolumeRadius
+
+        for transform in phantomWorld.values {
+            if simd_distance(transform.translation, orbCenter) <= threshold {
+                return true
+            }
+        }
+
+        for (child, parent) in Self.contactBonePairs {
+            guard let a = phantomWorld[parent]?.translation,
+                  let b = phantomWorld[child]?.translation else { continue }
+            if distanceFromPoint(orbCenter, toSegmentFrom: a, to: b) <= threshold {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func distanceFromPoint(
+        _ point: SIMD3<Float>,
+        toSegmentFrom a: SIMD3<Float>,
+        to b: SIMD3<Float>
+    ) -> Float {
+        let ab = b - a
+        let lengthSquared = simd_length_squared(ab)
+        guard lengthSquared > 0.000001 else {
+            return simd_distance(point, a)
+        }
+
+        let t = max(0, min(1, simd_dot(point - a, ab) / lengthSquared))
+        let closest = a + ab * t
+        return simd_distance(point, closest)
     }
 
     func updateBimanual(intactTip: SIMD3<Float>?, phantomTip: SIMD3<Float>?) {
@@ -191,12 +288,15 @@ final class TaskManager {
             orb.position = pos
             orbRoot.addChild(orb)
             orbs.append(orb)
+            orbBasePositions[orb.name] = pos
         }
     }
 
     private func clearOrbs() {
         for orb in orbs { orb.removeFromParent() }
         orbs.removeAll()
+        orbBasePositions.removeAll()
+        orbTouchedAt.removeAll()
     }
 
     private func spawnCubes() {

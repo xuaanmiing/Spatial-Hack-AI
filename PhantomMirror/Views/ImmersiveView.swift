@@ -51,6 +51,7 @@ struct ImmersiveView: View {
         }
         .onDisappear {
             handTracker.stop()
+            scene.detachFromImmersiveSpace()
         }
     }
 
@@ -69,7 +70,7 @@ struct ImmersiveView: View {
     /// Show / hide the debug joint spheres based on the current app phase, using
     /// the last known phantom-hand world transforms.
     private func updateJointMarkersForCurrentPhase() {
-        guard appState.phase == .calibration else {
+        guard appState.phase == .calibration || appState.phase == .training else {
             scene.jointMarkers.setVisible(false)
             return
         }
@@ -174,9 +175,9 @@ struct ImmersiveView: View {
             showIntact: appState.showVirtualIntactHand
         )
 
-        // Debug joint markers: on during calibration, off during training so the demo
-        // stays clean. Selected joint pulses; joints with a saved offset glow orange.
-        if appState.phase == .calibration {
+        // The calibrated marker positions are the visual source of truth; keep them
+        // visible during both calibration and training.
+        if appState.phase == .calibration || appState.phase == .training {
             scene.jointMarkers.setVisible(true)
             let tuned: Set<HandSkeleton.JointName> = Set(
                 CalibrationData.adjustableJoints.filter {
@@ -193,14 +194,14 @@ struct ImmersiveView: View {
             scene.jointMarkers.setVisible(false)
         }
 
-        let mode = scene.usingFallback ? "procedural" : "USDZ"
+        let mode = "calibrated skeleton"
         appState.trackingStatus =
             "Tracking \(intactIsLeft ? "left→right" : "right→left") · \(mode) · joints \(scene.jointCountLastFrame)"
 
         guard appState.phase == .training else { return }
 
         tasks.updateOpenClose(openness: scene.lastPhantomOpenness)
-        tasks.updateTouchOrbs(phantomIndexTip: scene.lastPhantomIndexTip)
+        tasks.updateTouchOrbs(phantomWorld: scene.lastPhantomWorld)
         tasks.updateBimanual(
             intactTip: scene.lastIntactIndexTip,
             phantomTip: scene.lastPhantomIndexTip
