@@ -20,8 +20,13 @@ struct ImmersiveView: View {
             await scene.loadModels()
             await setupTracking()
         }
+        .task(id: appState.phase) {
+            // Keep a head-relative phantom visible while waiting for the intact hand.
+            await presentFallbackPhantomWhileWaiting()
+        }
         .onAppear {
             handTracker.intactChirality = appState.missingSide.intactIsLeft ? .left : .right
+            presentFallbackPhantom()
             if appState.phase == .training {
                 startTrainingTasks()
             }
@@ -56,15 +61,39 @@ struct ImmersiveView: View {
     }
 
     private func refreshPreviewIfNeeded() {
-        // Live tracking already reapplies offsets every frame; only refresh static preview.
-        guard handTracker.authorizationDenied else { return }
-        scene.showPreview(
+        // In preview / waiting mode, re-apply offsets immediately.
+        // While live tracking, tracked frames already apply calibration every update.
+        if handTracker.authorizationDenied || !scene.isShowingTrackedHand {
+            presentFallbackPhantom()
+        }
+        updateJointMarkersForCurrentPhase()
+    }
+
+    private func presentFallbackPhantom() {
+        scene.showPreviewOrHide(
             showIntact: appState.showVirtualIntactHand,
             phantomIsLeft: appState.missingSide == .left,
             jointOffsets: appState.calibration.jointOffsetMap,
-            phantomScale: appState.calibration.phantomScale
+            phantomScale: appState.calibration.phantomScale,
+            headPose: handTracker.currentHeadPose() ?? scene.lastHeadPose
         )
         updateJointMarkersForCurrentPhase()
+    }
+
+    private func presentFallbackPhantomWhileWaiting() async {
+        while !Task.isCancelled {
+            if appState.phase == .calibration || appState.phase == .training {
+                if let head = handTracker.currentHeadPose() {
+                    scene.rememberHeadPose(head)
+                    scene.placeHintInFrontOfHead(head)
+                }
+                // Only fill in a preview when we are not currently drawing a tracked hand.
+                if !scene.isShowingTrackedHand {
+                    presentFallbackPhantom()
+                }
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
     }
 
     /// Show / hide the debug joint spheres based on the current app phase, using
@@ -89,7 +118,10 @@ struct ImmersiveView: View {
     }
 
     private func startTrainingTasks() {
-        tasks.configure(phantomIsLeft: appState.missingSide == .left)
+        tasks.configure(
+            phantomIsLeft: appState.missingSide == .left,
+            headPose: handTracker.currentHeadPose()
+        )
         tasks.resetAll()
         tasks.start(.touchOrbs)
         appState.taskInstruction = TaskManager.TaskKind.touchOrbs.instruction
@@ -103,8 +135,14 @@ struct ImmersiveView: View {
         handTracker.onIntactHandLost = {
             appState.trackingStatus = "Intact hand lost — hold \(appState.missingSide.intactSideTitle) in view"
             appState.session.framesLost += 1
-            // Keep last pose visible briefly? Safer: show hint so user knows to re-present hand.
-            scene.hideHands(showHint: true)
+            // Keep a head-relative phantom visible so calibration never goes blank.
+            scene.showPreviewOrHide(
+                showIntact: appState.showVirtualIntactHand,
+                phantomIsLeft: appState.missingSide == .left,
+                jointOffsets: appState.calibration.jointOffsetMap,
+                phantomScale: appState.calibration.phantomScale,
+                headPose: handTracker.currentHeadPose() ?? scene.lastHeadPose
+            )
         }
 
         handTracker.onIntactHandUpdate = { anchor, head in
@@ -123,15 +161,15 @@ struct ImmersiveView: View {
         if handTracker.authorizationDenied {
             let detail = handTracker.lastErrorDescription ?? "unsupported"
             appState.trackingStatus = "Preview mode — \(detail) · \(scene.statusDetail)"
-            scene.showPreview(
-                showIntact: appState.showVirtualIntactHand,
-                phantomIsLeft: appState.missingSide == .left,
-                jointOffsets: appState.calibration.jointOffsetMap,
-                phantomScale: appState.calibration.phantomScale
-            )
+            presentFallbackPhantom()
             return
         }
 
+        if let headPose = handTracker.currentHeadPose() {
+            scene.rememberHeadPose(headPose)
+            scene.placeHintInFrontOfHead(headPose)
+        }
+        presentFallbackPhantom()
         appState.trackingStatus = "Looking for \(appState.missingSide.intactSideTitle) · \(scene.statusDetail)"
     }
 
@@ -144,7 +182,13 @@ struct ImmersiveView: View {
         tasks: TaskManager
     ) {
         guard anchor.isTracked, let skeleton = anchor.handSkeleton else {
-            scene.hideHands(showHint: true)
+            scene.showPreviewOrHide(
+                showIntact: appState.showVirtualIntactHand,
+                phantomIsLeft: appState.missingSide == .left,
+                jointOffsets: appState.calibration.jointOffsetMap,
+                phantomScale: appState.calibration.phantomScale,
+                headPose: handTracker.currentHeadPose() ?? scene.lastHeadPose
+            )
             return
         }
 
@@ -156,13 +200,24 @@ struct ImmersiveView: View {
         if let head, head.isTracked {
             headPose = head.originFromAnchorTransform
         } else {
-            headPose = handTracker.currentHeadPose()
+            headPose = handTracker.currentHeadPose() ?? scene.lastHeadPose
         }
         guard let headPose else {
             appState.trackingStatus = "Waiting for head pose to establish the body midline…"
-            scene.hideHands(showHint: true)
+            scene.showPreviewOrHide(
+                showIntact: appState.showVirtualIntactHand,
+                phantomIsLeft: appState.missingSide == .left,
+                jointOffsets: appState.calibration.jointOffsetMap,
+                phantomScale: appState.calibration.phantomScale,
+                headPose: nil,
+                showHintIfNoPose: true
+            )
             return
         }
+
+        scene.rememberHeadPose(headPose)
+        scene.placeHintInFrontOfHead(headPose)
+        tasks.updateReferenceHeadPose(headPose)
 
         let intactIsLeft = appState.missingSide.intactIsLeft
 
@@ -202,13 +257,21 @@ struct ImmersiveView: View {
 
         tasks.updateTouchOrbs(phantomWorld: scene.lastPhantomWorld)
         tasks.updateBimanual(
-            intactTip: scene.lastIntactIndexTip,
-            phantomTip: scene.lastPhantomIndexTip
+            intactWorld: scene.lastIntactWorld,
+            phantomWorld: scene.lastPhantomWorld
         )
         tasks.updateClapHands(
             intactWorld: scene.lastIntactWorld,
             phantomWorld: scene.lastPhantomWorld
         )
+        tasks.updateSliceBlocks(phantomWorld: scene.lastPhantomWorld)
+
+        let now = CACurrentMediaTime()
+        let celebrationOrigin = scene.lastPhantomIndexTip
+            ?? scene.lastPhantomWorld[.wrist]?.translation
+            ?? SIMD3(0, 1.3, -0.45)
+        scene.updateCelebration(trigger: tasks.celebrationTrigger, origin: celebrationOrigin, now: now)
+
         appState.taskInstruction = tasks.current.instruction
     }
 }

@@ -16,7 +16,7 @@ struct CalibrationData: Codable, Equatable {
     /// Applied on top of the USDZ rest bone lengths after rotations are driven.
     var jointOffsets: [String: SIMD3<Float>] = [:]
 
-    static let offsetStep: Float = 0.01
+    static let offsetStep: Float = 0.1
     static let scaleStep: Float = 0.05
     static let jointOffsetStep: Float = 0.002
 

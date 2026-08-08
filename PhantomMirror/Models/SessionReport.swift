@@ -9,7 +9,7 @@ struct SessionReport: Codable, Equatable {
     var framesTracked: Int = 0
     var framesLost: Int = 0
     var tasksCompleted: Int = 0
-    var totalTasks: Int = 3
+    var totalTasks: Int = 5
     var averageHandUpdateIntervalMs: Double = 0
 
     var durationSeconds: TimeInterval {

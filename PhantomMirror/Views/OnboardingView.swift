@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OnboardingView: View {
     @Environment(AppState.self) private var appState
+    @Environment(AudioFeedback.self) private var audio
 
     var body: some View {
         NavigationStack {
@@ -34,7 +35,7 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 10) {
             Label("How it works", systemImage: "hand.raised.fill")
                 .font(.headline)
-            Text("1. Wear Vision Pro and grant Hand Tracking\n2. Calibrate phantom hand position (telescoping)\n3. Open/close, touch orbs, then bimanual matching")
+            Text("1. Wear Vision Pro and grant Hand Tracking\n2. Calibrate phantom hand position (telescoping)\n3. Touch orbs, bimanual match, clap, horizontal slice, then vertical slice")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -80,6 +81,10 @@ struct OnboardingView: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
             Toggle("Hide real upper limbs", isOn: Bindable(appState).hideRealUpperLimbs)
+            Toggle("Sound effects & ambient", isOn: Bindable(audio).isEnabled)
+                .onChange(of: audio.isEnabled) { _, enabled in
+                    if !enabled { audio.stopAmbient() }
+                }
         }
     }
 

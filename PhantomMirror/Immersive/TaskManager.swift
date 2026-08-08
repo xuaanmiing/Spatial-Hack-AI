@@ -12,6 +12,8 @@ final class TaskManager {
         case touchOrbs = 0
         case bimanual = 1
         case clapHands = 2
+        case sliceHorizontal = 3
+        case sliceVertical = 4
 
         var id: Int { rawValue }
 
@@ -20,6 +22,8 @@ final class TaskManager {
             case .touchOrbs: return "Touch Orbs"
             case .bimanual: return "Bimanual Match"
             case .clapHands: return "Clap Hands"
+            case .sliceHorizontal: return "Horizontal Slice"
+            case .sliceVertical: return "Vertical Slice"
             }
         }
 
@@ -28,9 +32,13 @@ final class TaskManager {
             case .touchOrbs:
                 return "Reach with the phantom hand and touch each glowing orb."
             case .bimanual:
-                return "Use both hands: intact hand for the cyan cube, phantom hand for the amber cube — bring them together."
+                return "Pinch each cube with thumb + index + middle (intact = cyan, phantom = amber), then bring them together."
             case .clapHands:
                 return "Bring your intact hand and phantom hand together like a clap."
+            case .sliceHorizontal:
+                return "Swipe your phantom hand sideways through the block to cut it horizontally."
+            case .sliceVertical:
+                return "Swipe your phantom hand up or down through the block to cut it vertically."
             }
         }
     }
@@ -38,7 +46,12 @@ final class TaskManager {
     private(set) var current: TaskKind = .touchOrbs
     private(set) var isComplete = false
     private(set) var progressText: String = ""
+    /// Increments whenever a task reaches completion (drives celebration FX).
+    private(set) var celebrationTrigger: Int = 0
     private var phantomIsLeft = false
+    /// Latest head pose used to place task props in front of the user (not at world origin).
+    private var referenceHeadPose: simd_float4x4?
+    weak var audio: AudioFeedback?
 
     // Touch orbs
     let orbRoot = Entity()
@@ -84,13 +97,53 @@ final class TaskManager {
     private var cyanCube: ModelEntity?
     private var amberCube: ModelEntity?
     private var cubesJoined = false
+    private var cyanGrabbed = false
+    private var amberGrabbed = false
+    private let cubeHalfSize: Float = 0.04
+    /// Loose contact radius so three-finger pinch is easy to trigger on device.
+    private let fingertipContactRadius: Float = 0.055
+    /// Once grabbed, keep holding until tips move farther away (hysteresis).
+    private let fingertipHoldRadius: Float = 0.11
+    private let cubeJoinDistance: Float = 0.10
+    /// Each finger can touch with tip or near-tip joint.
+    private static let pinchFingers: [[HandSkeleton.JointName]] = [
+        [.thumbTip, .thumbIntermediateTip],
+        [.indexFingerTip, .indexFingerIntermediateTip],
+        [.middleFingerTip, .middleFingerIntermediateTip]
+    ]
 
     // Clap hands
     private var clapDetected = false
     private let clapDistanceThreshold: Float = 0.085
 
-    func configure(phantomIsLeft: Bool) {
+    // Slice blocks
+    let sliceRoot = Entity()
+    private var sliceBlock: ModelEntity?
+    private var sliceHalfA: ModelEntity?
+    private var sliceHalfB: ModelEntity?
+    private var previousPalmCenter: SIMD3<Float>?
+    private var previousSampleTime: CFTimeInterval?
+    private var sliceBlockCenter = SIMD3<Float>.zero
+    private let sliceBlockHalfSize: Float = 0.07
+    private let sliceMinSpeed: Float = 0.22
+
+    func configure(phantomIsLeft: Bool, headPose: simd_float4x4? = nil) {
         self.phantomIsLeft = phantomIsLeft
+        if let headPose {
+            referenceHeadPose = headPose
+        }
+    }
+
+    func updateReferenceHeadPose(_ headPose: simd_float4x4) {
+        referenceHeadPose = headPose
+    }
+
+    private func place(right: Float, up: Float, forward: Float) -> SIMD3<Float> {
+        if let head = referenceHeadPose {
+            return MirrorTransform.pointRelativeToHead(head, right: right, up: up, forward: forward)
+        }
+        // Fallback for preview without head tracking.
+        return SIMD3(right, 1.25 + up, -forward)
     }
 
     func resetAll() {
@@ -98,10 +151,16 @@ final class TaskManager {
         isComplete = false
         orbsTouched = 0
         cubesJoined = false
+        cyanGrabbed = false
+        amberGrabbed = false
         clapDetected = false
+        previousPalmCenter = nil
+        previousSampleTime = nil
+        celebrationTrigger = 0
         progressText = "Orbs: 0 / 3"
         clearOrbs()
         clearCubes()
+        clearSliceBlock()
     }
 
     func start(_ kind: TaskKind) {
@@ -113,16 +172,35 @@ final class TaskManager {
             progressText = "Orbs: 0 / 3"
             spawnOrbs()
             clearCubes()
+            clearSliceBlock()
         case .bimanual:
             cubesJoined = false
-            progressText = "Bring cubes together"
+            cyanGrabbed = false
+            amberGrabbed = false
+            progressText = "Cyan: open  ·  Amber: open"
             clearOrbs()
+            clearSliceBlock()
             spawnCubes()
         case .clapHands:
             clapDetected = false
             progressText = "Bring palms together"
             clearOrbs()
             clearCubes()
+            clearSliceBlock()
+        case .sliceHorizontal:
+            previousPalmCenter = nil
+            previousSampleTime = nil
+            progressText = "Swipe sideways through the block"
+            clearOrbs()
+            clearCubes()
+            spawnSliceBlock()
+        case .sliceVertical:
+            previousPalmCenter = nil
+            previousSampleTime = nil
+            progressText = "Swipe up/down through the block"
+            clearOrbs()
+            clearCubes()
+            spawnSliceBlock()
         }
     }
 
@@ -155,9 +233,9 @@ final class TaskManager {
                 progressText = "Orbs: \(orbsTouched) / 3"
                 orb.model?.materials = [UnlitMaterial(color: .systemYellow)]
                 animateTouchedOrb(orb, touchedAt: now, now: now)
+                audio?.play(.orbTouch)
                 if orbsTouched >= 3 {
-                    isComplete = true
-                    progressText = "Task complete ✓"
+                    markComplete()
                 }
             }
         }
@@ -216,36 +294,128 @@ final class TaskManager {
         return simd_distance(point, closest)
     }
 
-    func updateBimanual(intactTip: SIMD3<Float>?, phantomTip: SIMD3<Float>?) {
+    func updateBimanual(
+        intactWorld: [HandSkeleton.JointName: simd_float4x4],
+        phantomWorld: [HandSkeleton.JointName: simd_float4x4]
+    ) {
         guard current == .bimanual,
               let cyan = cyanCube,
               let amber = amberCube,
               !cubesJoined else { return }
 
-        if let intact = intactTip {
-            let d = simd_distance(intact, cyan.position(relativeTo: nil))
-            if d < 0.05 {
-                cyan.position = intact
+        let cyanCenter = cyan.position(relativeTo: nil)
+        let amberCenter = amber.position(relativeTo: nil)
+
+        let cyanContact = pinchContactCount(world: intactWorld, cubeCenter: cyanCenter, holding: cyanGrabbed)
+        let amberContact = pinchContactCount(world: phantomWorld, cubeCenter: amberCenter, holding: amberGrabbed)
+
+        if let grip = pinchGripCenter(world: intactWorld, cubeCenter: cyanCenter, holding: cyanGrabbed) {
+            if !cyanGrabbed {
+                cyanGrabbed = true
+                audio?.play(.cubeGrab)
             }
+            cyan.position = grip
+        } else if cyanGrabbed {
+            cyanGrabbed = false
         }
-        if let phantom = phantomTip {
-            let d = simd_distance(phantom, amber.position(relativeTo: nil))
-            if d < 0.05 {
-                amber.position = phantom
+
+        if let grip = pinchGripCenter(world: phantomWorld, cubeCenter: amberCenter, holding: amberGrabbed) {
+            if !amberGrabbed {
+                amberGrabbed = true
+                audio?.play(.cubeGrab)
             }
+            amber.position = grip
+        } else if amberGrabbed {
+            amberGrabbed = false
         }
+
+        progressText =
+            "Cyan: \(cyanGrabbed ? "holding" : "\(cyanContact)/3")  ·  Amber: \(amberGrabbed ? "holding" : "\(amberContact)/3")"
 
         let separation = simd_distance(
             cyan.position(relativeTo: nil),
             amber.position(relativeTo: nil)
         )
-        if separation < 0.06 {
+        if cyanGrabbed && amberGrabbed && separation < cubeJoinDistance {
             cubesJoined = true
-            isComplete = true
-            progressText = "Task complete ✓"
+            markComplete()
             cyan.model?.materials = [SimpleMaterial(color: .systemGreen, isMetallic: false)]
             amber.model?.materials = [SimpleMaterial(color: .systemGreen, isMetallic: false)]
         }
+    }
+
+    /// Requires thumb, index, and middle all near the cube (tip or near-tip joint).
+    private func pinchGripCenter(
+        world: [HandSkeleton.JointName: simd_float4x4],
+        cubeCenter: SIMD3<Float>,
+        holding: Bool
+    ) -> SIMD3<Float>? {
+        let radius = holding ? fingertipHoldRadius : fingertipContactRadius
+        var tips: [SIMD3<Float>] = []
+        tips.reserveCapacity(Self.pinchFingers.count)
+
+        for joints in Self.pinchFingers {
+            guard let tip = closestFingerPoint(joints: joints, world: world, cubeCenter: cubeCenter),
+                  fingertipTouchesCube(tip, cubeCenter: cubeCenter, radius: radius) else {
+                return nil
+            }
+            tips.append(tip)
+        }
+
+        let sum = tips.reduce(SIMD3<Float>.zero, +)
+        return sum / Float(tips.count)
+    }
+
+    private func pinchContactCount(
+        world: [HandSkeleton.JointName: simd_float4x4],
+        cubeCenter: SIMD3<Float>,
+        holding: Bool
+    ) -> Int {
+        let radius = holding ? fingertipHoldRadius : fingertipContactRadius
+        var count = 0
+        for joints in Self.pinchFingers {
+            if let tip = closestFingerPoint(joints: joints, world: world, cubeCenter: cubeCenter),
+               fingertipTouchesCube(tip, cubeCenter: cubeCenter, radius: radius) {
+                count += 1
+            }
+        }
+        return count
+    }
+
+    private func closestFingerPoint(
+        joints: [HandSkeleton.JointName],
+        world: [HandSkeleton.JointName: simd_float4x4],
+        cubeCenter: SIMD3<Float>
+    ) -> SIMD3<Float>? {
+        var best: SIMD3<Float>?
+        var bestDistance = Float.greatestFiniteMagnitude
+        for joint in joints {
+            guard let tip = world[joint]?.translation else { continue }
+            let distance = distanceToCubeSurface(tip, cubeCenter: cubeCenter)
+            if distance < bestDistance {
+                bestDistance = distance
+                best = tip
+            }
+        }
+        return best
+    }
+
+    private func fingertipTouchesCube(
+        _ tip: SIMD3<Float>,
+        cubeCenter: SIMD3<Float>,
+        radius: Float
+    ) -> Bool {
+        distanceToCubeSurface(tip, cubeCenter: cubeCenter) <= radius
+    }
+
+    private func distanceToCubeSurface(_ tip: SIMD3<Float>, cubeCenter: SIMD3<Float>) -> Float {
+        let local = tip - cubeCenter
+        let closestOnCube = SIMD3(
+            max(-cubeHalfSize, min(cubeHalfSize, local.x)),
+            max(-cubeHalfSize, min(cubeHalfSize, local.y)),
+            max(-cubeHalfSize, min(cubeHalfSize, local.z))
+        )
+        return simd_distance(local, closestOnCube)
     }
 
     func updateClapHands(
@@ -261,8 +431,60 @@ final class TaskManager {
         progressText = String(format: "Palm distance: %.0f cm", distance * 100)
         if distance <= clapDistanceThreshold {
             clapDetected = true
-            isComplete = true
-            progressText = "Task complete ✓"
+            audio?.play(.clap)
+            markComplete()
+        }
+    }
+
+    func updateSliceBlocks(phantomWorld: [HandSkeleton.JointName: simd_float4x4]) {
+        guard (current == .sliceHorizontal || current == .sliceVertical),
+              !isComplete,
+              let palm = palmCenter(from: phantomWorld) else { return }
+
+        let now = CACurrentMediaTime()
+        defer {
+            previousPalmCenter = palm
+            previousSampleTime = now
+        }
+
+        guard let previous = previousPalmCenter,
+              let previousTime = previousSampleTime else { return }
+
+        let dt = Float(max(0.001, now - previousTime))
+        let velocity = (palm - previous) / dt
+        let speed = simd_length(velocity)
+        guard speed >= sliceMinSpeed else {
+            progressText = current == .sliceHorizontal
+                ? String(format: "Swipe sideways · %.0f cm/s", speed * 100)
+                : String(format: "Swipe up/down · %.0f cm/s", speed * 100)
+            return
+        }
+
+        let blockBounds = sliceBlockHalfSize * 1.35
+        let local = palm - sliceBlockCenter
+        let insideBlock = abs(local.x) <= blockBounds
+            && abs(local.y) <= blockBounds
+            && abs(local.z) <= blockBounds
+        guard insideBlock else { return }
+
+        let horizontalMotion = abs(velocity.x) + abs(velocity.z)
+        let verticalMotion = abs(velocity.y)
+
+        switch current {
+        case .sliceHorizontal:
+            guard horizontalMotion > verticalMotion * 1.05,
+                  horizontalMotion > sliceMinSpeed * 0.75 else { return }
+            applyHorizontalSlice()
+            audio?.play(.slice)
+            markComplete()
+        case .sliceVertical:
+            guard verticalMotion > horizontalMotion * 1.05,
+                  verticalMotion > sliceMinSpeed * 0.75 else { return }
+            applyVerticalSlice()
+            audio?.play(.slice)
+            markComplete()
+        default:
+            break
         }
     }
 
@@ -292,9 +514,9 @@ final class TaskManager {
         clearOrbs()
         let side: Float = phantomIsLeft ? -1 : 1
         let positions: [SIMD3<Float>] = [
-            SIMD3(side * 0.15, 1.2, -0.45),
-            SIMD3(side * 0.28, 1.35, -0.35),
-            SIMD3(side * 0.08, 1.45, -0.55)
+            place(right: side * 0.15, up: -0.35, forward: 0.45),
+            place(right: side * 0.28, up: -0.20, forward: 0.35),
+            place(right: side * 0.08, up: -0.10, forward: 0.55)
         ]
         for (i, pos) in positions.enumerated() {
             let mat = SimpleMaterial(color: .systemOrange, roughness: 0.2, isMetallic: false)
@@ -321,18 +543,19 @@ final class TaskManager {
         clearCubes()
         let phantomX: Float = phantomIsLeft ? -0.18 : 0.18
         let intactX = -phantomX
+        let cubeSize = cubeHalfSize * 2
         let cyan = ModelEntity(
-            mesh: .generateBox(size: 0.05, cornerRadius: 0.005),
+            mesh: .generateBox(size: cubeSize, cornerRadius: 0.006),
             materials: [SimpleMaterial(color: .cyan, isMetallic: false)]
         )
-        cyan.position = SIMD3(intactX, 1.2, -0.4)
+        cyan.position = place(right: intactX, up: -0.30, forward: 0.75)
         cyan.name = "cyanCube"
 
         let amber = ModelEntity(
-            mesh: .generateBox(size: 0.05, cornerRadius: 0.005),
+            mesh: .generateBox(size: cubeSize, cornerRadius: 0.006),
             materials: [SimpleMaterial(color: .systemOrange, isMetallic: false)]
         )
-        amber.position = SIMD3(phantomX, 1.2, -0.4)
+        amber.position = place(right: phantomX, up: -0.30, forward: 0.75)
         amber.name = "amberCube"
 
         cubeRoot.addChild(cyan)
@@ -346,5 +569,108 @@ final class TaskManager {
         amberCube?.removeFromParent()
         cyanCube = nil
         amberCube = nil
+    }
+
+    private func markComplete() {
+        guard !isComplete else { return }
+        isComplete = true
+        progressText = "Task complete ✓"
+        celebrationTrigger += 1
+        audio?.play(.celebrate)
+    }
+
+    private func spawnSliceBlock() {
+        clearSliceBlock()
+        let side: Float = phantomIsLeft ? -1 : 1
+        sliceBlockCenter = place(right: side * 0.2, up: -0.30, forward: 0.75)
+
+        let block = ModelEntity(
+            mesh: .generateBox(size: sliceBlockHalfSize * 2, cornerRadius: 0.004),
+            materials: [SimpleMaterial(color: UIColor(red: 0.72, green: 0.55, blue: 0.95, alpha: 1), roughness: 0.25, isMetallic: false)]
+        )
+        block.position = sliceBlockCenter
+        block.name = "sliceBlock"
+        sliceRoot.addChild(block)
+        sliceBlock = block
+    }
+
+    private func applyHorizontalSlice() {
+        guard let block = sliceBlock else { return }
+        let center = sliceBlockCenter
+        let halfThickness = sliceBlockHalfSize * 0.5
+        let materials = block.model?.materials ?? [SimpleMaterial(color: .systemPurple, isMetallic: false)]
+        block.isEnabled = false
+
+        let top = ModelEntity(
+            mesh: .generateBox(size: SIMD3(sliceBlockHalfSize * 2, halfThickness, sliceBlockHalfSize * 2), cornerRadius: 0.004),
+            materials: materials
+        )
+        top.position = center + SIMD3(0, halfThickness * 0.5, 0)
+        top.name = "sliceTop"
+
+        let bottom = ModelEntity(
+            mesh: .generateBox(size: SIMD3(sliceBlockHalfSize * 2, halfThickness, sliceBlockHalfSize * 2), cornerRadius: 0.004),
+            materials: materials
+        )
+        bottom.position = center + SIMD3(0, -halfThickness * 0.5, 0)
+        bottom.name = "sliceBottom"
+
+        sliceRoot.addChild(top)
+        sliceRoot.addChild(bottom)
+        sliceHalfA = top
+        sliceHalfB = bottom
+        animateSliceSeparation(a: top, b: bottom, axis: SIMD3(0, 1, 0), amount: 0.06)
+    }
+
+    private func applyVerticalSlice() {
+        guard let block = sliceBlock else { return }
+        let center = sliceBlockCenter
+        let halfThickness = sliceBlockHalfSize * 0.5
+        let materials = block.model?.materials ?? [SimpleMaterial(color: .systemPurple, isMetallic: false)]
+        block.isEnabled = false
+
+        let left = ModelEntity(
+            mesh: .generateBox(size: SIMD3(halfThickness, sliceBlockHalfSize * 2, sliceBlockHalfSize * 2), cornerRadius: 0.004),
+            materials: materials
+        )
+        left.position = center + SIMD3(-halfThickness * 0.5, 0, 0)
+        left.name = "sliceLeft"
+
+        let right = ModelEntity(
+            mesh: .generateBox(size: SIMD3(halfThickness, sliceBlockHalfSize * 2, sliceBlockHalfSize * 2), cornerRadius: 0.004),
+            materials: materials
+        )
+        right.position = center + SIMD3(halfThickness * 0.5, 0, 0)
+        right.name = "sliceRight"
+
+        sliceRoot.addChild(left)
+        sliceRoot.addChild(right)
+        sliceHalfA = left
+        sliceHalfB = right
+        animateSliceSeparation(a: left, b: right, axis: SIMD3(1, 0, 0), amount: 0.06)
+    }
+
+    private func animateSliceSeparation(
+        a: ModelEntity,
+        b: ModelEntity,
+        axis: SIMD3<Float>,
+        amount: Float
+    ) {
+        var aTransform = a.transform
+        aTransform.translation = a.position + axis * amount
+        a.move(to: aTransform, relativeTo: sliceRoot, duration: 0.22, timingFunction: .easeOut)
+
+        var bTransform = b.transform
+        bTransform.translation = b.position - axis * amount
+        b.move(to: bTransform, relativeTo: sliceRoot, duration: 0.22, timingFunction: .easeOut)
+    }
+
+    private func clearSliceBlock() {
+        sliceBlock?.removeFromParent()
+        sliceHalfA?.removeFromParent()
+        sliceHalfB?.removeFromParent()
+        sliceBlock = nil
+        sliceHalfA = nil
+        sliceHalfB = nil
     }
 }

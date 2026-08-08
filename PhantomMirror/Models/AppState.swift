@@ -116,6 +116,7 @@ final class AppState {
         resetSession()
         session.startedAt = Date()
         session.prePainNRS = baselinePain
+        session.totalTasks = TaskManager.TaskKind.allCases.count
         phase = .training
         immersiveOpen = true
         currentTaskIndex = 0

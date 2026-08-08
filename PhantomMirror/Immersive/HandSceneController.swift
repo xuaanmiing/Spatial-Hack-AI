@@ -26,6 +26,7 @@ final class HandSceneController {
     /// Debug markers drawn on every phantom joint so the user can see which bone
     /// their calibration UI is currently editing. Hidden during training.
     let jointMarkers = JointMarkerOverlay()
+    let celebration = CelebrationEffect()
 
     private var hintEntity: ModelEntity?
     private(set) var isBuilt = false
@@ -33,7 +34,12 @@ final class HandSceneController {
     private(set) var statusDetail: String = "Models not loaded"
     private(set) var jointCountLastFrame: Int = 0
     private(set) var usingFallback: Bool = false
-    private var mirrorReferenceHeadPose: simd_float4x4?
+    /// True only while the phantom is driven by a live intact-hand skeleton.
+    private(set) var isShowingTrackedHand = false
+    private var lastCelebrationTrigger = 0
+    private var lastCelebrationUpdateTime: CFTimeInterval?
+    /// Last good head pose — used when DeviceAnchor briefly drops so we don't blank the hand.
+    private(set) var lastHeadPose: simd_float4x4?
 
     /// Most recent hand world transforms — reused by overlays and training tasks.
     private(set) var lastIntactWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
@@ -67,12 +73,15 @@ final class HandSceneController {
         root.addChild(jointMarkers.root)
         root.addChild(tasks.orbRoot)
         root.addChild(tasks.cubeRoot)
+        root.addChild(tasks.sliceRoot)
+        root.addChild(celebration.root)
 
         let hint = ModelEntity(
             mesh: .generateSphere(radius: 0.04),
             materials: [UnlitMaterial(color: .systemYellow)]
         )
         hint.name = "trackingHint"
+        // Temporary world fallback; updated to sit in front of the head once pose is known.
         hint.position = SIMD3(0, 1.3, -0.55)
         root.addChild(hint)
         hintEntity = hint
@@ -96,9 +105,36 @@ final class HandSceneController {
         hintEntity?.isEnabled = visible
     }
 
+    func placeHintInFrontOfHead(_ headPose: simd_float4x4) {
+        hintEntity?.position = MirrorTransform.pointRelativeToHead(
+            headPose,
+            right: 0,
+            up: -0.15,
+            forward: 0.55
+        )
+    }
+
     func detachFromImmersiveSpace() {
-        mirrorReferenceHeadPose = nil
+        lastCelebrationTrigger = 0
+        lastCelebrationUpdateTime = nil
+        lastHeadPose = nil
+        celebration.clear()
         root.removeFromParent()
+    }
+
+    func rememberHeadPose(_ headPose: simd_float4x4) {
+        lastHeadPose = headPose
+    }
+
+    func updateCelebration(trigger: Int, origin: SIMD3<Float>, now: CFTimeInterval) {
+        if trigger > lastCelebrationTrigger {
+            lastCelebrationTrigger = trigger
+            celebration.burst(at: origin, now: now)
+        }
+        let previous = lastCelebrationUpdateTime ?? now
+        let delta = Float(max(0.001, now - previous))
+        lastCelebrationUpdateTime = now
+        celebration.update(now: now, delta: delta)
     }
 
     /// Drive visuals from an intact-hand ARKit skeleton.
@@ -118,18 +154,29 @@ final class HandSceneController {
             intactWorld[name] = wristWorld * joint.anchorFromJointTransform
         }
 
-        if mirrorReferenceHeadPose == nil {
-            mirrorReferenceHeadPose = headPose
+        guard !intactWorld.isEmpty else {
+            // Skeleton reported but no tracked joints yet — keep a head-relative preview up.
+            showPreview(
+                showIntact: showIntact,
+                phantomIsLeft: !intactIsLeft,
+                jointOffsets: calibration.jointOffsetMap,
+                phantomScale: calibration.phantomScale,
+                headPose: headPose
+            )
+            return
         }
-        let referenceHeadPose = mirrorReferenceHeadPose ?? headPose
 
+        // Always mirror across the *current* head midline. Freezing the first head pose
+        // left the sagittal plane stranded at world origin / old position, so the phantom
+        // often appeared meters away when calibration opened.
+        lastHeadPose = headPose
         var phantomWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
         for (name, worldT) in intactWorld {
-            let mirrored = MirrorTransform.mirror(worldT, headPose: referenceHeadPose)
+            let mirrored = MirrorTransform.mirror(worldT, headPose: headPose)
             phantomWorld[name] = MirrorTransform.applyCalibration(
                 mirrored,
                 calibration: calibration,
-                headPose: referenceHeadPose
+                headPose: headPose
             )
         }
         phantomWorld = Self.applyJointOffsets(calibration.jointOffsetMap, to: phantomWorld)
@@ -140,6 +187,7 @@ final class HandSceneController {
         lastPhantomOpenness = fallbackPhantom.gripOpenness(from: phantomWorld)
         lastPhantomWorld = phantomWorld
         jointCountLastFrame = intactWorld.count
+        isShowingTrackedHand = true
         setHintVisible(false)
 
         phantomUSDZ.setVisible(false)
@@ -163,6 +211,7 @@ final class HandSceneController {
         jointMarkers.hideAll()
         setHintVisible(showHint)
         jointCountLastFrame = 0
+        isShowingTrackedHand = false
         lastIntactWorld = [:]
         lastIntactIndexTip = nil
         lastPhantomIndexTip = nil
@@ -170,17 +219,50 @@ final class HandSceneController {
         lastPhantomWorld = [:]
     }
 
+    /// Prefer keeping a visible preview instead of a blank scene when tracking drops.
+    func showPreviewOrHide(
+        showIntact: Bool,
+        phantomIsLeft: Bool,
+        jointOffsets: [HandSkeleton.JointName: SIMD3<Float>],
+        phantomScale: Float,
+        headPose: simd_float4x4?,
+        showHintIfNoPose: Bool = true
+    ) {
+        let pose = headPose ?? lastHeadPose
+        if let pose {
+            showPreview(
+                showIntact: showIntact,
+                phantomIsLeft: phantomIsLeft,
+                jointOffsets: jointOffsets,
+                phantomScale: phantomScale,
+                headPose: pose
+            )
+        } else {
+            hideHands(showHint: showHintIfNoPose)
+        }
+    }
+
     /// Simulator / no-tracking: show the procedural skeleton in front of user.
     /// - Parameter phantomIsLeft: `true` when the missing (phantom) side is the left hand.
+    /// - Parameter headPose: when available, places wrists relative to the head instead of world origin.
     func showPreview(
         showIntact: Bool,
         phantomIsLeft: Bool,
         jointOffsets: [HandSkeleton.JointName: SIMD3<Float>] = [:],
-        phantomScale: Float = 1
+        phantomScale: Float = 1,
+        headPose: simd_float4x4? = nil
     ) {
         setHintVisible(false)
-        let leftWristPos = SIMD3<Float>(-0.18, 1.25, -0.45)
-        let rightWristPos = SIMD3<Float>(0.18, 1.25, -0.45)
+        let leftWristPos: SIMD3<Float>
+        let rightWristPos: SIMD3<Float>
+        if let headPose {
+            leftWristPos = MirrorTransform.pointRelativeToHead(headPose, right: -0.18, up: -0.35, forward: 0.40)
+            rightWristPos = MirrorTransform.pointRelativeToHead(headPose, right: 0.18, up: -0.35, forward: 0.40)
+        } else {
+            // Last-resort fallback if head pose is unavailable.
+            leftWristPos = SIMD3(-0.18, 1.25, -0.45)
+            rightWristPos = SIMD3(0.18, 1.25, -0.45)
+        }
         let phantomPos = phantomIsLeft ? leftWristPos : rightWristPos
         let intactPos = phantomIsLeft ? rightWristPos : leftWristPos
         let phantomPose = Self.applyJointOffsets(
@@ -195,11 +277,15 @@ final class HandSceneController {
         fallbackPhantom.setVisible(true)
         fallbackPhantom.update(worldTransforms: phantomPose, scale: phantomScale)
         jointCountLastFrame = phantomPose.count
+        isShowingTrackedHand = false
         lastIntactWorld = intactPose
         lastIntactIndexTip = intactPose[.indexFingerTip]?.translation
         lastPhantomIndexTip = phantomPose[.indexFingerTip]?.translation
         lastPhantomOpenness = 0.12
         lastPhantomWorld = phantomPose
+        if let headPose {
+            lastHeadPose = headPose
+        }
     }
 
     private static func applyJointOffsets(

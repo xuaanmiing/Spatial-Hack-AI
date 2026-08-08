@@ -85,3 +85,36 @@ extension simd_float4x4 {
         SIMD3(columns.3.x, columns.3.y, columns.3.z)
     }
 }
+
+extension MirrorTransform {
+    /// Place a point relative to the user's current head: +X right, +Y up, +Z forward (in front).
+    static func pointRelativeToHead(
+        _ headPose: simd_float4x4,
+        right: Float,
+        up: Float,
+        forward: Float
+    ) -> SIMD3<Float> {
+        let headPosition = headPose.translation
+
+        var headRight = SIMD3<Float>(headPose.columns.0.x, 0, headPose.columns.0.z)
+        if simd_length_squared(headRight) < 0.000001 {
+            headRight = SIMD3(1, 0, 0)
+        } else {
+            headRight = simd_normalize(headRight)
+        }
+
+        // Device looks along -Z; horizontal forward is the flattened opposite of column 2.
+        var headForward = SIMD3<Float>(-headPose.columns.2.x, 0, -headPose.columns.2.z)
+        if simd_length_squared(headForward) < 0.000001 {
+            headForward = SIMD3(0, 0, -1)
+        } else {
+            headForward = simd_normalize(headForward)
+        }
+
+        let worldUp = SIMD3<Float>(0, 1, 0)
+        return headPosition
+            + headRight * right
+            + worldUp * up
+            + headForward * forward
+    }
+}

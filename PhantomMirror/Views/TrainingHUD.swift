@@ -3,6 +3,7 @@ import SwiftUI
 struct TrainingHUD: View {
     @Environment(AppState.self) private var appState
     @Environment(TaskManager.self) private var tasks
+    @Environment(AudioFeedback.self) private var audio
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -53,6 +54,7 @@ struct TrainingHUD: View {
                     } else if tasks.advanceIfPossible() {
                         appState.currentTaskIndex = tasks.current.rawValue
                         appState.taskInstruction = tasks.current.instruction
+                        audio.play(.taskAdvance)
                     } else {
                         appState.finishTraining()
                     }
@@ -73,6 +75,7 @@ struct TrainingHUD: View {
                 if tasks.advanceIfPossible() {
                     appState.currentTaskIndex = tasks.current.rawValue
                     appState.taskInstruction = tasks.current.instruction
+                    audio.play(.taskAdvance)
                 } else {
                     appState.session.tasksCompleted = taskCount
                     appState.finishTraining()
