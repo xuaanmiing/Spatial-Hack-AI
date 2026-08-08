@@ -107,7 +107,9 @@ final class ARKitHandModel {
 
         guard let model, !jointMap.isEmpty else { return }
         var transforms = restJointTransforms.isEmpty ? model.jointTransforms : restJointTransforms
-        guard transforms.count == model.jointTransforms.count else {
+        // Rest snapshot can go stale if RealityKit rebuilt the skeleton; fall back to
+        // the live jointTransforms array so we always match the model's expected count.
+        if transforms.count != model.jointTransforms.count {
             transforms = model.jointTransforms
         }
         for entry in jointMap where entry.index < transforms.count {
