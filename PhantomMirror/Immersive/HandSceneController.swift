@@ -5,22 +5,32 @@ import ARKit
 import simd
 import UIKit
 
-/// Scene owner: procedurally-skinned phantom hand + optional intact visual + task props.
-/// The phantom hand is a `SkinnedProceduralHand` (PBR spheres + capsules) placed at the
-/// exact same world-space joint positions the blue calibration skeleton uses, so the
-/// skin coincides with the calibration markers by construction.
+/// Scene owner: skinned phantom hand + optional intact visual + task props.
 ///
-/// Never relies on SwiftUI View state for entity references.
+/// The phantom hand is a `UsdcSkinnedHand`: the mesh from
+/// `PhantomMirror/Resources/hand.usdc` is re-skinned per-frame with linear
+/// blend skinning against the same world-space joint positions the blue
+/// calibration skeleton uses, so every knuckle / fingertip on the mesh sits
+/// on top of the corresponding calibrated ARKit joint by construction.
+///
+/// If the usdc fails to load, we fall back to the earlier procedural
+/// PBR-spheres-and-capsules hand (`SkinnedProceduralHand`), which uses the
+/// same joint dictionary as its input so nothing else has to change.
 @MainActor
 @Observable
 final class HandSceneController {
     let root = Entity()
 
-    /// Procedurally-skinned hand for the phantom (mirrored) side.
-    private let phantomSkin = SkinnedProceduralHand(name: "phantomSkin")
-    /// Procedurally-skinned hand for the intact side (only shown when the
-    /// user opts in during calibration / debug).
-    private let intactSkin = SkinnedProceduralHand(name: "intactSkin")
+    /// Skinned hand mesh (from hand.usdc) for the phantom (mirrored) side.
+    private let phantomMesh = UsdcSkinnedHand(name: "phantomMesh")
+    /// Skinned hand mesh for the intact side (only shown when the user opts
+    /// in during calibration / debug).
+    private let intactMesh = UsdcSkinnedHand(name: "intactMesh")
+
+    /// Procedural fallback (spheres + capsules) used only when the usdc mesh
+    /// couldn't be loaded — never in the shipping demo.
+    private let phantomProc = SkinnedProceduralHand(name: "phantomProc")
+    private let intactProc = SkinnedProceduralHand(name: "intactProc")
 
     /// Debug fallback — original blue "wireframe" skeleton. Never shown in
     /// the shipping demo; kept here so future debugging can flip it on.
@@ -64,8 +74,10 @@ final class HandSceneController {
 
         root.name = "handSceneRoot"
         content.add(root)
-        root.addChild(phantomSkin.root)
-        root.addChild(intactSkin.root)
+        root.addChild(phantomMesh.root)
+        root.addChild(intactMesh.root)
+        root.addChild(phantomProc.root)
+        root.addChild(intactProc.root)
         root.addChild(fallbackIntact.root)
         root.addChild(fallbackPhantom.root)
         root.addChild(jointMarkers.root)
@@ -83,16 +95,29 @@ final class HandSceneController {
 
         fallbackIntact.setVisible(false)
         fallbackPhantom.setVisible(false)
-        phantomSkin.setVisible(false)
-        intactSkin.setVisible(false)
+        phantomMesh.setVisible(false)
+        intactMesh.setVisible(false)
+        phantomProc.setVisible(false)
+        intactProc.setVisible(false)
         isBuilt = true
     }
 
     func loadModels() async {
-        // Procedural skin is built at init(); nothing to load asynchronously.
+        // Try to load the hand.usdc mesh. If it works, we'll use it as the
+        // primary skinned hand. If not, we fall back to the procedural
+        // spheres-and-capsules hand which is always available.
+        await phantomMesh.loadFromBundle()
+        await intactMesh.loadFromBundle()
+
         modelsReady = true
-        usingFallback = false
-        statusDetail = "Procedural skin ready"
+        usingFallback = !(phantomMesh.isLoaded && intactMesh.isLoaded)
+
+        if !usingFallback {
+            statusDetail = "hand.usdc mesh skinned"
+        } else {
+            let reason = phantomMesh.loadError ?? intactMesh.loadError ?? "usdc missing"
+            statusDetail = "Procedural fallback — \(reason)"
+        }
     }
 
     func setHintVisible(_ visible: Bool) {
@@ -138,26 +163,45 @@ final class HandSceneController {
         jointCountLastFrame = intactWorld.count
         setHintVisible(false)
 
-        // Show the procedurally-skinned phantom hand at the mirrored+calibrated positions.
-        phantomSkin.setVisible(true)
-        phantomSkin.update(worldTransforms: phantomWorld, scale: calibration.phantomScale)
-
-        // Optionally show the intact side too.
-        if showIntact {
-            intactSkin.setVisible(true)
-            intactSkin.update(worldTransforms: intactWorld, scale: 1.0)
+        // Drive whichever skinned hand is available. When the usdc mesh
+        // loaded successfully we use it (real hand-shaped mesh); otherwise
+        // the procedural spheres+capsules hand — both consume the same
+        // world-transforms dict.
+        if !usingFallback {
+            phantomMesh.setVisible(true)
+            phantomMesh.update(worldTransforms: phantomWorld, scale: calibration.phantomScale)
+            phantomProc.setVisible(false)
+            if showIntact {
+                intactMesh.setVisible(true)
+                intactMesh.update(worldTransforms: intactWorld, scale: 1.0)
+                intactProc.setVisible(false)
+            } else {
+                intactMesh.setVisible(false)
+                intactProc.setVisible(false)
+            }
         } else {
-            intactSkin.setVisible(false)
+            phantomMesh.setVisible(false)
+            phantomProc.setVisible(true)
+            phantomProc.update(worldTransforms: phantomWorld, scale: calibration.phantomScale)
+            if showIntact {
+                intactMesh.setVisible(false)
+                intactProc.setVisible(true)
+                intactProc.update(worldTransforms: intactWorld, scale: 1.0)
+            } else {
+                intactMesh.setVisible(false)
+                intactProc.setVisible(false)
+            }
         }
 
-        // Debug fallbacks stay off in the shipping demo.
         fallbackPhantom.setVisible(false)
         fallbackIntact.setVisible(false)
     }
 
     func hideHands(showHint: Bool = true) {
-        phantomSkin.setVisible(false)
-        intactSkin.setVisible(false)
+        phantomMesh.setVisible(false)
+        intactMesh.setVisible(false)
+        phantomProc.setVisible(false)
+        intactProc.setVisible(false)
         fallbackIntact.setVisible(false)
         fallbackPhantom.setVisible(false)
         jointMarkers.hideAll()
@@ -191,14 +235,30 @@ final class HandSceneController {
         )
         let intactPose = Self.makePreviewHandPose(wrist: intactPos, isLeft: !phantomIsLeft)
 
-        phantomSkin.setVisible(true)
-        phantomSkin.update(worldTransforms: phantomPose, scale: phantomScale)
-
-        if showIntact {
-            intactSkin.setVisible(true)
-            intactSkin.update(worldTransforms: intactPose)
+        if !usingFallback {
+            phantomMesh.setVisible(true)
+            phantomMesh.update(worldTransforms: phantomPose, scale: phantomScale)
+            phantomProc.setVisible(false)
+            if showIntact {
+                intactMesh.setVisible(true)
+                intactMesh.update(worldTransforms: intactPose)
+                intactProc.setVisible(false)
+            } else {
+                intactMesh.setVisible(false)
+                intactProc.setVisible(false)
+            }
         } else {
-            intactSkin.setVisible(false)
+            phantomMesh.setVisible(false)
+            phantomProc.setVisible(true)
+            phantomProc.update(worldTransforms: phantomPose, scale: phantomScale)
+            if showIntact {
+                intactMesh.setVisible(false)
+                intactProc.setVisible(true)
+                intactProc.update(worldTransforms: intactPose)
+            } else {
+                intactMesh.setVisible(false)
+                intactProc.setVisible(false)
+            }
         }
 
         fallbackIntact.setVisible(false)
