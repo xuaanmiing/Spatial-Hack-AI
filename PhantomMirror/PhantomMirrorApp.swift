@@ -22,7 +22,7 @@ struct PhantomMirrorApp: App {
                 }
         }
         .windowStyle(.automatic)
-        .defaultSize(width: 520, height: 720)
+        .defaultSize(width: 800, height: 800)
 
         ImmersiveSpace(id: "PhantomMirrorSpace") {
             ImmersiveView()
@@ -37,6 +37,8 @@ struct PhantomMirrorApp: App {
                 }
         }
         .immersionStyle(selection: .constant(.mixed), in: .mixed)
+        // Scene-level preference so real hands composite above virtual orbs/cubes.
+        .upperLimbVisibility(appState.hideRealUpperLimbs ? .hidden : .visible)
     }
 }
 
@@ -50,16 +52,18 @@ struct RootView: View {
     var body: some View {
         Group {
             switch appState.phase {
+            case .welcome:
+                WelcomeView()
             case .onboarding:
                 OnboardingView()
             case .calibration:
-                ZStack(alignment: .bottom) {
+                ZStack(alignment: .center) {
                     Color.clear
                     CalibrationPanel()
                         .padding()
                 }
             case .training:
-                ZStack(alignment: .bottomTrailing) {
+                ZStack(alignment: .center) {
                     Color.clear
                     TrainingHUD()
                         .padding()
@@ -75,7 +79,7 @@ struct RootView: View {
             switch phase {
             case .training:
                 audio.startAmbient()
-            case .onboarding, .calibration, .report:
+            case .welcome, .onboarding, .calibration, .report:
                 audio.stopAmbient()
             }
         }

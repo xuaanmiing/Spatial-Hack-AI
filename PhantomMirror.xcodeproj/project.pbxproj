@@ -14,6 +14,7 @@
 		5633D2AC90AE465AA4E0A101 /* TrainingHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEF04CE05FAB4BBD8238D429 /* TrainingHUD.swift */; };
 		58792150E0284E5A8777AC31 /* SessionReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7B4571E18CA41E69A97F514 /* SessionReport.swift */; };
 		7B8A627A65624B8CAD28BFA5 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A70F368DEDC49D682BDD44B /* OnboardingView.swift */; };
+		111111111111111111111111 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222222 /* WelcomeView.swift */; };
 		8E563726383A4C14BC72B4A3 /* VirtualHandVisualizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF3EAAFD83E4237AA22EA9D /* VirtualHandVisualizer.swift */; };
 		991AEC39DD0347489D71750A /* ReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB76F33BE6184395B6EEFA4D /* ReportView.swift */; };
 		A1C2E3F405162738495A6B7C /* CelebrationEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718293A4B5C6D /* CelebrationEffect.swift */; };
@@ -41,6 +42,7 @@
 		3F95D5435A3D46B8B7DABCE1 /* PhantomMirror.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PhantomMirror.entitlements; sourceTree = "<group>"; };
 		51BC6C2FEB4F4086BF84E656 /* HandSceneController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandSceneController.swift; sourceTree = "<group>"; };
 		6A70F368DEDC49D682BDD44B /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		222222222222222222222222 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F6478890ABCDEF /* ARKitHandModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARKitHandModel.swift; sourceTree = "<group>"; };
 		A3504900B7D84EF1ACDD0355 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		A4EB5C3BBF36473495937FAD /* PhantomMirrorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhantomMirrorApp.swift; sourceTree = "<group>"; };
@@ -106,6 +108,7 @@
 			children = (
 				B013E1AABA814BC5AADF6227 /* ImmersiveView.swift */,
 				6A70F368DEDC49D682BDD44B /* OnboardingView.swift */,
+				222222222222222222222222 /* WelcomeView.swift */,
 				22379AD3D5EC45DFBCD082A4 /* CalibrationPanel.swift */,
 				C4D5E6F708194A2BB3C4D5E7 /* JointDebugPanel.swift */,
 				EEF04CE05FAB4BBD8238D429 /* TrainingHUD.swift */,
@@ -230,6 +233,7 @@
 				24842030DCFA480AB61592FC /* TaskManager.swift in Sources */,
 				1149217B71A94D09A926B3AE /* ImmersiveView.swift in Sources */,
 				7B8A627A65624B8CAD28BFA5 /* OnboardingView.swift in Sources */,
+				111111111111111111111111 /* WelcomeView.swift in Sources */,
 				A32D5A427FAC42CD97F142E3 /* CalibrationPanel.swift in Sources */,
 				C4D5E6F708194A2BB3C4D5E6 /* JointDebugPanel.swift in Sources */,
 				5633D2AC90AE465AA4E0A101 /* TrainingHUD.swift in Sources */,

@@ -7,6 +7,7 @@ import ARKit
 @Observable
 final class AppState {
     enum Phase: String {
+        case welcome
         case onboarding
         case calibration
         case training
@@ -51,14 +52,15 @@ final class AppState {
         var intactIsLeft: Bool { self == .right }
     }
 
-    var phase: Phase = .onboarding
+    var phase: Phase = .welcome
     var missingSide: MissingSide = .right
     var calibration = CalibrationData()
     var session = SessionReport()
     var immersiveOpen = false
     /// Optional demo overlay of the intact side. Classic mirror therapy shows only the phantom.
     var showVirtualIntactHand = false
-    var hideRealUpperLimbs = true
+    /// When false, real hands stay visible and composite above virtual props.
+    var hideRealUpperLimbs = false
 
     /// Calibration UI: whole-hand pose vs per-joint debug offsets.
     var calibrationTab: CalibrationTab = .pose

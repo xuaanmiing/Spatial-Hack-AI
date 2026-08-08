@@ -157,6 +157,16 @@ final class TaskManager {
         static let handHeight: Float = -0.18
     }
 
+    /// Removes all spawned training props. Call when leaving training / immersive space
+    /// so orbs/cubes/blocks don't linger into the next calibration session.
+    func clearSceneProps() {
+        clearOrbs()
+        clearCubes()
+        clearSliceBlock()
+        previousPalmCenter = nil
+        previousSampleTime = nil
+    }
+
     func resetAll() {
         current = .touchOrbs
         isComplete = false
@@ -170,9 +180,7 @@ final class TaskManager {
         previousSampleTime = nil
         celebrationTrigger = 0
         progressText = "Orbs: 0 / 3"
-        clearOrbs()
-        clearCubes()
-        clearSliceBlock()
+        clearSceneProps()
     }
 
     func start(_ kind: TaskKind) {
@@ -543,12 +551,13 @@ final class TaskManager {
 
     private func spawnOrbs() {
         clearOrbs()
-        // Bias toward the phantom-hand side so the virtual arm can reach them comfortably.
+        // Spread across phantom-side reach space (near / high / far) so they don't overlap.
         let side: Float = phantomIsLeft ? -1 : 1
+        let h = ReachableSpawn.handHeight
         let positions: [SIMD3<Float>] = [
-            place(right: side * 0.16, up: ReachableSpawn.handHeight, forward: ReachableSpawn.forward),
-            place(right: side * 0.24, up: ReachableSpawn.handHeight + 0.06, forward: ReachableSpawn.forward + 0.03),
-            place(right: side * 0.12, up: ReachableSpawn.handHeight - 0.05, forward: ReachableSpawn.forward - 0.02)
+            place(right: side * 0.10, up: h - 0.08, forward: 0.40),
+            place(right: side * 0.30, up: h + 0.12, forward: 0.50),
+            place(right: side * 0.18, up: h + 0.02, forward: 0.65)
         ]
         for (i, pos) in positions.enumerated() {
             let mat = SimpleMaterial(color: .systemOrange, roughness: 0.2, isMetallic: false)

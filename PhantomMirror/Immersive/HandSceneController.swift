@@ -60,6 +60,10 @@ final class HandSceneController {
 
     func attach(to content: RealityViewContent, tasks: TaskManager) {
         if isBuilt {
+            // ImmersiveSpace reuse keeps the same entity graph — wipe leftover props.
+            tasks.clearSceneProps()
+            celebration.clear()
+            lastCelebrationTrigger = 0
             if root.parent == nil { content.add(root) }
             return
         }
@@ -114,7 +118,8 @@ final class HandSceneController {
         )
     }
 
-    func detachFromImmersiveSpace() {
+    func detachFromImmersiveSpace(clearing tasks: TaskManager? = nil) {
+        tasks?.clearSceneProps()
         lastCelebrationTrigger = 0
         lastCelebrationUpdateTime = nil
         lastHeadPose = nil

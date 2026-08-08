@@ -15,7 +15,9 @@ struct ImmersiveView: View {
             scene.attach(to: content, tasks: tasks)
             scene.setHintVisible(true)
         }
-        .upperLimbVisibility(appState.hideRealUpperLimbs ? .hidden : .automatic)
+        // `.visible` keeps passthrough hands above virtual props.
+        // `.hidden` draws all virtual content over the real hands.
+        .upperLimbVisibility(appState.hideRealUpperLimbs ? .hidden : .visible)
         .task {
             await scene.loadModels()
             await setupTracking()
@@ -34,6 +36,10 @@ struct ImmersiveView: View {
         .onChange(of: appState.phase) { _, phase in
             if phase == .training {
                 startTrainingTasks()
+            } else {
+                // Leaving training must drop props immediately; immersive dismiss can lag.
+                tasks.clearSceneProps()
+                scene.celebration.clear()
             }
         }
         .onChange(of: appState.missingSide) { _, _ in
@@ -55,8 +61,9 @@ struct ImmersiveView: View {
             updateJointMarkersForCurrentPhase()
         }
         .onDisappear {
+            tasks.clearSceneProps()
             handTracker.stop()
-            scene.detachFromImmersiveSpace()
+            scene.detachFromImmersiveSpace(clearing: tasks)
         }
     }
 
