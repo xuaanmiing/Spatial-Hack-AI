@@ -3,16 +3,31 @@ import RealityKit
 import ARKit
 import simd
 import UIKit
+import CoreGraphics
 
 /// Loads a rigged hand/forearm USDZ and drives it from an ARKit `HandSkeleton`.
 ///
 /// Joints are matched by **name**, not by array index: different assets author their
 /// skeletons in different orders (Apple's own gloves disagree with each other), so an
 /// index-based mapping silently swaps fingers.
+///
+/// The material applied to the mesh is a natural-skin `PhysicallyBasedMaterial`
+/// with a procedurally-generated tangent-space normal map, so the phantom hand
+/// reads as human skin rather than a plastic mannequin under Vision Pro
+/// passthrough lighting.
 @MainActor
 final class ARKitHandModel {
     /// Asset names tried in order; first one present in the bundle wins.
+    /// HandArm_Right is preferred: it is a rigged hand + short forearm glove
+    /// that matches the therapy brief (we do not render elbow/upper arm).
     private static let candidateAssets = ["HandArm_Right", "RightHand_ARKit27"]
+
+    /// Shared, lazily-built procedural skin normal map. Generating a small
+    /// tileable noise texture at runtime avoids shipping baked textures while
+    /// still giving the PBR shader something for specular highlights to sit
+    /// on — the difference between "plastic mannequin" and "skin" in
+    /// passthrough lighting.
+    private static var cachedSkinNormalTexture: MaterialParameters.Texture?
 
     private(set) var root = Entity()
     private(set) var model: ModelEntity?
@@ -35,7 +50,13 @@ final class ARKitHandModel {
     let name: String
     private let tint: UIColor
 
-    init(name: String, tint: UIColor = UIColor(red: 0.88, green: 0.67, blue: 0.56, alpha: 1.0)) {
+    /// Warm mid-tone skin (Fitzpatrick ~III) — reads convincingly in Vision
+    /// Pro passthrough against most lighting. Alpha is 1.0 because mirror-box
+    /// therapy is more effective when the brain accepts the phantom as a real
+    /// (opaque) limb rather than a see-through hologram.
+    static let defaultSkinTint = UIColor(red: 0.88, green: 0.68, blue: 0.58, alpha: 1.0)
+
+    init(name: String, tint: UIColor = ARKitHandModel.defaultSkinTint) {
         self.name = name
         self.tint = tint
         root.name = name
@@ -160,17 +181,161 @@ final class ARKitHandModel {
         root.transform = t
     }
 
+    /// Build a natural-skin PBR material for the rigged hand mesh.
+    ///
+    /// Skin is a dielectric with weak subsurface scattering. RealityKit's
+    /// `PhysicallyBasedMaterial` doesn't expose true SSS on visionOS 2, so we
+    /// approximate it with:
+    ///   * a warm base color (baked skin tone),
+    ///   * a mid-high roughness that still lets light catch on knuckles,
+    ///   * a very thin clearcoat for the oily sheen on fingertips and nails,
+    ///   * a subtle procedural normal map for micro-detail (pores / creases)
+    ///     so the mesh doesn't read as a smooth mannequin, and
+    ///   * a small warm emissive lift so the limb stays legible against
+    ///     bright Vision Pro passthrough even in a dim room. The lift is far
+    ///     below the "glowing hologram" threshold so the hand still reads as
+    ///     flesh, not as an obviously-virtual overlay.
     private func applyMaterial(to model: ModelEntity) {
         var material = PhysicallyBasedMaterial()
+
         material.baseColor = .init(tint: tint)
-        material.roughness = 0.55
+        material.roughness = 0.62
         material.metallic = 0.0
-        // Keeps the limb readable against bright passthrough even with weak scene lighting.
-        material.emissiveColor = .init(color: tint)
-        material.emissiveIntensity = 0.25
+        material.specular = 0.35
+
+        // Thin oil-film clearcoat gives specular highlights on knuckles / nails.
+        material.clearcoat = 0.15
+        material.clearcoatRoughness = 0.35
+
+        // Bake in a warm ambient tint so the hand doesn't turn gray under
+        // Vision Pro's environment-probe estimate when the user is in a
+        // cool-lit room.
+        let warmEmissive = tint.blended(with: .white, fraction: 0.25) ?? tint
+        material.emissiveColor = .init(color: warmEmissive)
+        material.emissiveIntensity = 0.08
+
+        // Fully opaque — the therapy brief calls for the phantom limb to be
+        // perceived as real; transparency weakens the mirror-box illusion.
+        material.blending = .opaque
+
+        // Procedural pore/crease normal map. Optional — if generation fails
+        // we still ship a good-looking skin material, just slightly flatter.
+        if let normal = Self.skinNormalTexture() {
+            material.normal = .init(texture: normal)
+        }
 
         let count = max(model.model?.materials.count ?? 1, 1)
         model.model?.materials = Array(repeating: material, count: count)
+    }
+
+    // MARK: - Procedural skin normal map
+
+    /// Returns a shared 256×256 tileable normal map that gives the skin
+    /// material micro-surface detail. Generated once per process; nil on
+    /// failure (rare).
+    private static func skinNormalTexture() -> MaterialParameters.Texture? {
+        if let cached = cachedSkinNormalTexture { return cached }
+        guard let cg = makeSkinNormalCGImage(size: 256) else { return nil }
+        do {
+            let options = TextureResource.CreateOptions(semantic: .normal)
+            let resource = try TextureResource.generate(
+                from: cg,
+                withName: "PhantomMirror.SkinNormal",
+                options: options
+            )
+            let tex = MaterialParameters.Texture(resource)
+            cachedSkinNormalTexture = tex
+            return tex
+        } catch {
+            return nil
+        }
+    }
+
+    /// Two-octave value noise -> height field -> normal map.
+    /// Pure Core Graphics so it runs on device without Metal shader setup.
+    private static func makeSkinNormalCGImage(size: Int) -> CGImage? {
+        let dim = size
+        let bytesPerPixel = 4
+        let bytesPerRow = dim * bytesPerPixel
+        var pixels = [UInt8](repeating: 0, count: dim * dim * bytesPerPixel)
+
+        // Deterministic PRNG so the pattern is stable between runs.
+        var seed: UInt32 = 0x9E3779B9
+        func rand() -> Float {
+            seed = seed &* 1664525 &+ 1013904223
+            return Float(seed & 0x00FFFFFF) / Float(0x01000000)
+        }
+
+        // Coarse and fine noise grids for two-octave detail.
+        let coarseGrid = 16
+        let fineGrid = 64
+        var coarse = [Float](repeating: 0, count: coarseGrid * coarseGrid)
+        var fine = [Float](repeating: 0, count: fineGrid * fineGrid)
+        for i in 0..<coarse.count { coarse[i] = rand() }
+        for i in 0..<fine.count { fine[i] = rand() }
+
+        func sample(_ grid: [Float], _ gridDim: Int, _ u: Float, _ v: Float) -> Float {
+            // Bilinear filter with wrap.
+            let x = u * Float(gridDim)
+            let y = v * Float(gridDim)
+            let x0 = Int(floor(x)) % gridDim
+            let y0 = Int(floor(y)) % gridDim
+            let x1 = (x0 + 1) % gridDim
+            let y1 = (y0 + 1) % gridDim
+            let fx = x - floor(x)
+            let fy = y - floor(y)
+            let a = grid[y0 * gridDim + x0]
+            let b = grid[y0 * gridDim + x1]
+            let c = grid[y1 * gridDim + x0]
+            let d = grid[y1 * gridDim + x1]
+            return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy
+        }
+
+        func heightAt(_ u: Float, _ v: Float) -> Float {
+            let c = sample(coarse, coarseGrid, u, v)
+            let f = sample(fine, fineGrid, u, v)
+            return c * 0.65 + f * 0.35
+        }
+
+        let strength: Float = 1.6 // How pronounced the pores are.
+        let step: Float = 1.0 / Float(dim)
+
+        for y in 0..<dim {
+            for x in 0..<dim {
+                let u = Float(x) / Float(dim)
+                let v = Float(y) / Float(dim)
+                let hL = heightAt((u - step + 1).truncatingRemainder(dividingBy: 1), v)
+                let hR = heightAt((u + step).truncatingRemainder(dividingBy: 1), v)
+                let hD = heightAt(u, (v - step + 1).truncatingRemainder(dividingBy: 1))
+                let hU = heightAt(u, (v + step).truncatingRemainder(dividingBy: 1))
+                let dx = (hR - hL) * strength
+                let dy = (hU - hD) * strength
+                var nx = -dx
+                var ny = -dy
+                var nz: Float = 1.0
+                let len = (nx * nx + ny * ny + nz * nz).squareRoot()
+                nx /= len; ny /= len; nz /= len
+                // Encode to 0..255. RealityKit expects tangent-space normals.
+                let idx = (y * dim + x) * bytesPerPixel
+                pixels[idx + 0] = UInt8(max(0, min(255, Int((nx * 0.5 + 0.5) * 255))))
+                pixels[idx + 1] = UInt8(max(0, min(255, Int((ny * 0.5 + 0.5) * 255))))
+                pixels[idx + 2] = UInt8(max(0, min(255, Int((nz * 0.5 + 0.5) * 255))))
+                pixels[idx + 3] = 255
+            }
+        }
+
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+        guard let ctx = CGContext(
+            data: &pixels,
+            width: dim,
+            height: dim,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo.rawValue
+        ) else { return nil }
+        return ctx.makeImage()
     }
 
     private static func bundleURL(for asset: String) -> URL? {
@@ -270,5 +435,27 @@ final class ARKitHandModel {
 
         if s.contains("hand") || s.contains("wrist") { return .wrist }
         return nil
+    }
+}
+
+// MARK: - UIColor blending helper
+
+private extension UIColor {
+    /// Linear blend of two colors. Used to warm the emissive lift without
+    /// shifting the base hue.
+    func blended(with other: UIColor, fraction: CGFloat) -> UIColor? {
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+        guard getRed(&r1, green: &g1, blue: &b1, alpha: &a1),
+              other.getRed(&r2, green: &g2, blue: &b2, alpha: &a2) else {
+            return nil
+        }
+        let f = max(0, min(1, fraction))
+        return UIColor(
+            red: r1 * (1 - f) + r2 * f,
+            green: g1 * (1 - f) + g2 * f,
+            blue: b1 * (1 - f) + b2 * f,
+            alpha: a1 * (1 - f) + a2 * f
+        )
     }
 }

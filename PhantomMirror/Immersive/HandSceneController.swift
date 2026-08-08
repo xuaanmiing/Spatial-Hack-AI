@@ -13,11 +13,14 @@ final class HandSceneController {
     let root = Entity()
 
     /// Primary: rigged hand/forearm driving the phantom (mirrored) side.
+    /// Rendered with a natural-skin PBR material (see `ARKitHandModel`).
     let phantomUSDZ = ARKitHandModel(name: "phantomUSDZ")
-    /// Optional intact hand (same right-handed asset, mirrored in X when tracking left).
+    /// Optional intact hand (same right-handed asset, mirrored in X when
+    /// tracking left). Same warm skin tone as the phantom so both hands read
+    /// as belonging to the same body when both are shown.
     let intactUSDZ = ARKitHandModel(
         name: "intactUSDZ",
-        tint: UIColor(red: 0.62, green: 0.78, blue: 0.88, alpha: 1.0)
+        tint: ARKitHandModel.defaultSkinTint
     )
 
     /// Fallback procedural skeleton if USDZ fails to load / has no joints.
