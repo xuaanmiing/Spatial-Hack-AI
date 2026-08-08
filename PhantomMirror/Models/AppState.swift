@@ -91,6 +91,13 @@ final class AppState {
         calibration = next
     }
 
+    /// Zero every offset for the joints in `group` (used by the per-finger reset button).
+    func resetOffsets(in group: CalibrationData.JointGroup) {
+        var next = calibration
+        next.resetOffsets(in: group)
+        calibration = next
+    }
+
     func resetSession() {
         session = SessionReport()
         currentTaskIndex = 0

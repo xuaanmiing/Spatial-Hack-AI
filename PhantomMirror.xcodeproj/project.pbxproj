@@ -19,6 +19,7 @@
 		A32D5A427FAC42CD97F142E3 /* CalibrationPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22379AD3D5EC45DFBCD082A4 /* CalibrationPanel.swift */; };
 		C4D5E6F708194A2BB3C4D5E6 /* JointDebugPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4D5E6F708194A2BB3C4D5E7 /* JointDebugPanel.swift */; };
 		B1B2C3D4E5F6478890ABCDEF /* ARKitHandModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6478890ABCDEF /* ARKitHandModel.swift */; };
+		D5E6F7081920A94BCDEF01234 /* JointMarkerOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5E6F7081920A94BCDEF01235 /* JointMarkerOverlay.swift */; };
 		B80F806F55E941C4A8452822 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3504900B7D84EF1ACDD0355 /* AppState.swift */; };
 		CAD6833123D14A168F926422 /* HandTrackingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8CFAE9E6DDF4A2AA9274C74 /* HandTrackingManager.swift */; };
 		D1B2C3D4E5F6478890ABCDEF /* RightHand_ARKit27.usdz in Resources */ = {isa = PBXBuildFile; fileRef = C1B2C3D4E5F6478890ABCDEF /* RightHand_ARKit27.usdz */; };
@@ -32,6 +33,7 @@
 		1A6F8CFE04E441D598572C43 /* MirrorTransform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorTransform.swift; sourceTree = "<group>"; };
 		22379AD3D5EC45DFBCD082A4 /* CalibrationPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationPanel.swift; sourceTree = "<group>"; };
 		C4D5E6F708194A2BB3C4D5E7 /* JointDebugPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JointDebugPanel.swift; sourceTree = "<group>"; };
+		D5E6F7081920A94BCDEF01235 /* JointMarkerOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JointMarkerOverlay.swift; sourceTree = "<group>"; };
 		2AF3EAAFD83E4237AA22EA9D /* VirtualHandVisualizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualHandVisualizer.swift; sourceTree = "<group>"; };
 		2E58945771FB4AEB8BAC593E /* CalibrationData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationData.swift; sourceTree = "<group>"; };
 		3B4F5CA6C2814994BB0DB3BF /* PhantomMirror.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PhantomMirror.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -84,6 +86,7 @@
 				1A6F8CFE04E441D598572C43 /* MirrorTransform.swift */,
 				C8CFAE9E6DDF4A2AA9274C74 /* HandTrackingManager.swift */,
 				2AF3EAAFD83E4237AA22EA9D /* VirtualHandVisualizer.swift */,
+				D5E6F7081920A94BCDEF01235 /* JointMarkerOverlay.swift */,
 				1756253FC9AF400B804EC260 /* TaskManager.swift */,
 			);
 			path = Immersive;
@@ -211,6 +214,7 @@
 				52C616D2A2A1480B83F16283 /* MirrorTransform.swift in Sources */,
 				CAD6833123D14A168F926422 /* HandTrackingManager.swift in Sources */,
 				8E563726383A4C14BC72B4A3 /* VirtualHandVisualizer.swift in Sources */,
+				D5E6F7081920A94BCDEF01234 /* JointMarkerOverlay.swift in Sources */,
 				24842030DCFA480AB61592FC /* TaskManager.swift in Sources */,
 				1149217B71A94D09A926B3AE /* ImmersiveView.swift in Sources */,
 				7B8A627A65624B8CAD28BFA5 /* OnboardingView.swift in Sources */,

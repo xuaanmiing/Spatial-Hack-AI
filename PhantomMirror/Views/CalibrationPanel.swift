@@ -23,6 +23,8 @@ struct CalibrationPanel: View {
                 offsetControls
                 scaleControls
                 yawControls
+                Divider().padding(.vertical, 2)
+                perBoneWristHint
             case .joints:
                 JointDebugPanel()
             }
@@ -82,6 +84,34 @@ struct CalibrationPanel: View {
                 appState.calibration.phantomOffset.z
             }
         }
+    }
+
+    /// Points users to the fine-grained wrist bone editor in the Joints tab.
+    private var perBoneWristHint: some View {
+        Button {
+            appState.selectedJoint = .wrist
+            appState.calibrationTab = .joints
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "scope")
+                    .font(.callout)
+                    .foregroundStyle(.tint)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Fine-tune wrist bone alone")
+                        .font(.callout.weight(.semibold))
+                    Text("Open the Joints tab and jump straight to the wrist joint editor.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(12)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
     }
 
     private var scaleControls: some View {

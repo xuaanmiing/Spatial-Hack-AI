@@ -2,6 +2,7 @@ import SwiftUI
 import RealityKit
 import ARKit
 import simd
+import QuartzCore
 
 struct ImmersiveView: View {
     @Environment(AppState.self) private var appState
@@ -40,6 +41,14 @@ struct ImmersiveView: View {
         .onChange(of: appState.showVirtualIntactHand) { _, _ in
             refreshPreviewIfNeeded()
         }
+        .onChange(of: appState.selectedJoint) { _, _ in
+            // Keep the in-scene highlight in sync even when live tracking hasn't
+            // produced a new frame yet (fast successive taps in the panel).
+            updateJointMarkersForCurrentPhase()
+        }
+        .onChange(of: appState.phase) { _, _ in
+            updateJointMarkersForCurrentPhase()
+        }
         .onDisappear {
             handTracker.stop()
         }
@@ -53,6 +62,28 @@ struct ImmersiveView: View {
             phantomIsLeft: appState.missingSide == .left,
             jointOffsets: appState.calibration.jointOffsetMap,
             phantomScale: appState.calibration.phantomScale
+        )
+        updateJointMarkersForCurrentPhase()
+    }
+
+    /// Show / hide the debug joint spheres based on the current app phase, using
+    /// the last known phantom-hand world transforms.
+    private func updateJointMarkersForCurrentPhase() {
+        guard appState.phase == .calibration else {
+            scene.jointMarkers.setVisible(false)
+            return
+        }
+        scene.jointMarkers.setVisible(true)
+        let tuned: Set<HandSkeleton.JointName> = Set(
+            CalibrationData.adjustableJoints.filter {
+                simd_length_squared(appState.calibration.offset(for: $0)) > 1e-12
+            }
+        )
+        scene.jointMarkers.update(
+            worldTransforms: scene.lastPhantomWorld,
+            selectedJoint: appState.selectedJoint,
+            tunedJoints: tuned,
+            time: CACurrentMediaTime()
         )
     }
 
@@ -142,6 +173,25 @@ struct ImmersiveView: View {
             intactIsLeft: intactIsLeft,
             showIntact: appState.showVirtualIntactHand
         )
+
+        // Debug joint markers: on during calibration, off during training so the demo
+        // stays clean. Selected joint pulses; joints with a saved offset glow orange.
+        if appState.phase == .calibration {
+            scene.jointMarkers.setVisible(true)
+            let tuned: Set<HandSkeleton.JointName> = Set(
+                CalibrationData.adjustableJoints.filter {
+                    simd_length_squared(appState.calibration.offset(for: $0)) > 1e-12
+                }
+            )
+            scene.jointMarkers.update(
+                worldTransforms: scene.lastPhantomWorld,
+                selectedJoint: appState.selectedJoint,
+                tunedJoints: tuned,
+                time: CACurrentMediaTime()
+            )
+        } else {
+            scene.jointMarkers.setVisible(false)
+        }
 
         let mode = scene.usingFallback ? "procedural" : "USDZ"
         appState.trackingStatus =

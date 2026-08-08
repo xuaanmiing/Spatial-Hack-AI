@@ -24,12 +24,20 @@ final class HandSceneController {
     private let fallbackIntact: VirtualHandVisualizer
     private let fallbackPhantom: VirtualHandVisualizer
 
+    /// Debug markers drawn on every phantom joint so the user can see which bone
+    /// their calibration UI is currently editing. Hidden during training.
+    let jointMarkers = JointMarkerOverlay()
+
     private var hintEntity: ModelEntity?
     private(set) var isBuilt = false
     private(set) var modelsReady = false
     private(set) var statusDetail: String = "Models not loaded"
     private(set) var jointCountLastFrame: Int = 0
     private(set) var usingFallback: Bool = false
+
+    /// Most recent phantom-hand world transforms — reused by the marker overlay
+    /// so it doesn't have to recompute the mirror math itself.
+    private(set) var lastPhantomWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
 
     /// Tip positions for training tasks (world space).
     private(set) var lastIntactIndexTip: SIMD3<Float>?
@@ -56,6 +64,7 @@ final class HandSceneController {
         root.addChild(intactUSDZ.root)
         root.addChild(fallbackIntact.root)
         root.addChild(fallbackPhantom.root)
+        root.addChild(jointMarkers.root)
         root.addChild(tasks.orbRoot)
         root.addChild(tasks.cubeRoot)
 
@@ -128,6 +137,7 @@ final class HandSceneController {
         lastIntactIndexTip = intactWorld[.indexFingerTip]?.translation
         lastPhantomIndexTip = phantomWorld[.indexFingerTip]?.translation
         lastPhantomOpenness = fallbackPhantom.gripOpenness(from: phantomWorld)
+        lastPhantomWorld = phantomWorld
         jointCountLastFrame = intactWorld.count
         setHintVisible(false)
 
@@ -197,11 +207,13 @@ final class HandSceneController {
         intactUSDZ.setVisible(false)
         fallbackIntact.setVisible(false)
         fallbackPhantom.setVisible(false)
+        jointMarkers.hideAll()
         setHintVisible(showHint)
         jointCountLastFrame = 0
         lastIntactIndexTip = nil
         lastPhantomIndexTip = nil
         lastPhantomOpenness = nil
+        lastPhantomWorld = [:]
     }
 
     /// Simulator / no-tracking: show USDZ rest pose (or procedural) in front of user.
@@ -241,6 +253,7 @@ final class HandSceneController {
             lastPhantomIndexTip = phantomPos + SIMD3(0, 0.05, -0.12)
             lastIntactIndexTip = intactPos + SIMD3(0, 0.05, -0.12)
             lastPhantomOpenness = 0.12
+            lastPhantomWorld = Self.makePreviewHandPose(wrist: phantomPos, isLeft: phantomIsLeft)
         } else {
             let phantomPose = Self.makePreviewHandPose(wrist: phantomPos, isLeft: phantomIsLeft)
             let intactPose = Self.makePreviewHandPose(wrist: intactPos, isLeft: !phantomIsLeft)
@@ -254,6 +267,7 @@ final class HandSceneController {
             lastIntactIndexTip = intactPose[.indexFingerTip]?.translation
             lastPhantomIndexTip = phantomPose[.indexFingerTip]?.translation
             lastPhantomOpenness = 0.12
+            lastPhantomWorld = phantomPose
         }
     }
 
