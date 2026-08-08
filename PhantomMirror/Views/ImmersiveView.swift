@@ -312,7 +312,12 @@ struct ImmersiveView: View {
         let celebrationOrigin = scene.lastPhantomIndexTip
             ?? scene.lastPhantomWorld[.wrist]?.translation
             ?? SIMD3(0, 1.3, -0.45)
-        scene.updateCelebration(trigger: tasks.celebrationTrigger, origin: celebrationOrigin, now: now)
+        scene.updateCelebration(
+            trigger: tasks.celebrationTrigger,
+            grandTrigger: tasks.grandCelebrationTrigger,
+            origin: celebrationOrigin,
+            now: now
+        )
 
         appState.taskInstruction = tasks.current.instruction
     }

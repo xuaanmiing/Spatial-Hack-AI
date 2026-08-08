@@ -37,6 +37,7 @@ final class HandSceneController {
     /// True only while the phantom is driven by a live intact-hand skeleton.
     private(set) var isShowingTrackedHand = false
     private var lastCelebrationTrigger = 0
+    private var lastGrandCelebrationTrigger = 0
     private var lastCelebrationUpdateTime: CFTimeInterval?
     /// Last good head pose — used when DeviceAnchor briefly drops so we don't blank the hand.
     private(set) var lastHeadPose: simd_float4x4?
@@ -69,6 +70,7 @@ final class HandSceneController {
             bricks.deactivate()
             celebration.clear()
             lastCelebrationTrigger = 0
+            lastGrandCelebrationTrigger = 0
             if root.parent == nil { content.add(root) }
             return
         }
@@ -131,6 +133,7 @@ final class HandSceneController {
         tasks?.clearSceneProps()
         bricks?.deactivate()
         lastCelebrationTrigger = 0
+        lastGrandCelebrationTrigger = 0
         lastCelebrationUpdateTime = nil
         lastHeadPose = nil
         celebration.clear()
@@ -141,10 +144,18 @@ final class HandSceneController {
         lastHeadPose = headPose
     }
 
-    func updateCelebration(trigger: Int, origin: SIMD3<Float>, now: CFTimeInterval) {
-        if trigger > lastCelebrationTrigger {
+    func updateCelebration(
+        trigger: Int,
+        grandTrigger: Int,
+        origin: SIMD3<Float>,
+        now: CFTimeInterval
+    ) {
+        if grandTrigger > lastGrandCelebrationTrigger {
+            lastGrandCelebrationTrigger = grandTrigger
+            celebration.burst(at: origin, now: now, isGrand: true)
+        } else if trigger > lastCelebrationTrigger {
             lastCelebrationTrigger = trigger
-            celebration.burst(at: origin, now: now)
+            celebration.burst(at: origin, now: now, isGrand: false)
         }
         let previous = lastCelebrationUpdateTime ?? now
         let delta = Float(max(0.001, now - previous))

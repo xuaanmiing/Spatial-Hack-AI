@@ -160,7 +160,7 @@ struct OnboardingView: View {
                 
                 ToggleRow(
                     title: "Audio feedback",
-                    subtitle: "Play sound effects and ambient tones",
+                    subtitle: "Play interaction sound effects",
                     isOn: Bindable(audio).isEnabled
                 )
                 .onChange(of: audio.isEnabled) { _, enabled in

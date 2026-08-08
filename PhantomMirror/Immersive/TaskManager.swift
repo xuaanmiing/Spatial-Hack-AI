@@ -36,9 +36,9 @@ final class TaskManager {
             case .clapHands:
                 return "Clap your intact hand and phantom hand together 5 times."
             case .sliceHorizontal:
-                return "Swipe your phantom hand sideways through the block to cut it horizontally."
+                return "Cut 3 moving blocks with sideways swipes. Time each slash as they drift."
             case .sliceVertical:
-                return "Swipe your phantom hand up or down through the block to cut it vertically."
+                return "Cut 3 moving blocks with up/down swipes. Time each slash as they drift."
             }
         }
     }
@@ -48,6 +48,7 @@ final class TaskManager {
     private(set) var progressText: String = ""
     /// Increments whenever a task reaches completion (drives celebration FX).
     private(set) var celebrationTrigger: Int = 0
+    private(set) var grandCelebrationTrigger: Int = 0
     private var phantomIsLeft = false
     /// Latest head pose used to place task props in front of the user (not at world origin).
     private var referenceHeadPose: simd_float4x4?
@@ -130,6 +131,19 @@ final class TaskManager {
     private var sliceBlockCenter = SIMD3<Float>.zero
     private let sliceBlockHalfSize: Float = 0.07
     private let sliceMinSpeed: Float = 0.22
+    private let sliceTargetCount = 3
+    private var slicesCompleted = 0
+    /// Head-relative spawn anchor; block drifts around this point.
+    private var sliceAnchorRight: Float = 0
+    private var sliceAnchorUp: Float = 0
+    private var sliceAnchorForward: Float = 0
+    private var sliceMotionStart: CFTimeInterval = 0
+    private var sliceDriftIsLateral = true
+    private var pendingNextSliceAt: CFTimeInterval?
+    private let sliceDriftAmplitude: Float = 0.09
+    private let sliceDriftPeriod: Float = 2.6
+    private let sliceYawAmplitude: Float = 0.28
+    private let sliceRespawnDelay: CFTimeInterval = 0.45
 
     func configure(phantomIsLeft: Bool, headPose: simd_float4x4? = nil) {
         self.phantomIsLeft = phantomIsLeft
@@ -176,9 +190,12 @@ final class TaskManager {
         amberGrabbed = false
         clapCount = 0
         clapIsClosed = false
+        slicesCompleted = 0
+        pendingNextSliceAt = nil
         previousPalmCenter = nil
         previousSampleTime = nil
         celebrationTrigger = 0
+        grandCelebrationTrigger = 0
         progressText = "Orbs: 0 / 3"
         clearSceneProps()
     }
@@ -208,17 +225,12 @@ final class TaskManager {
             clearOrbs()
             clearCubes()
             clearSliceBlock()
-        case .sliceHorizontal:
+        case .sliceHorizontal, .sliceVertical:
             previousPalmCenter = nil
             previousSampleTime = nil
-            progressText = "Swipe sideways through the block"
-            clearOrbs()
-            clearCubes()
-            spawnSliceBlock()
-        case .sliceVertical:
-            previousPalmCenter = nil
-            previousSampleTime = nil
-            progressText = "Swipe up/down through the block"
+            slicesCompleted = 0
+            pendingNextSliceAt = nil
+            progressText = "Slices: 0 / \(sliceTargetCount)"
             clearOrbs()
             clearCubes()
             spawnSliceBlock()
@@ -477,25 +489,48 @@ final class TaskManager {
 
     func updateSliceBlocks(phantomWorld: [HandSkeleton.JointName: simd_float4x4]) {
         guard (current == .sliceHorizontal || current == .sliceVertical),
-              !isComplete,
-              let palm = palmCenter(from: phantomWorld) else { return }
+              !isComplete else { return }
 
         let now = CACurrentMediaTime()
+
+        if let due = pendingNextSliceAt, now >= due {
+            pendingNextSliceAt = nil
+            spawnSliceBlock()
+        }
+
+        // Keep the live target drifting even if palm tracking briefly drops.
+        if pendingNextSliceAt == nil, sliceBlock?.isEnabled == true {
+            updateSliceMotion(at: now)
+        }
+
+        guard let palm = palmCenter(from: phantomWorld) else { return }
+
         defer {
             previousPalmCenter = palm
             previousSampleTime = now
         }
 
-        guard let previous = previousPalmCenter,
-              let previousTime = previousSampleTime else { return }
+        // While halves are animating, only wait for the next spawn.
+        guard pendingNextSliceAt == nil,
+              sliceBlock?.isEnabled == true,
+              let previous = previousPalmCenter,
+              let previousTime = previousSampleTime else {
+            progressText = "Slices: \(slicesCompleted) / \(sliceTargetCount)"
+            return
+        }
 
         let dt = Float(max(0.001, now - previousTime))
         let velocity = (palm - previous) / dt
         let speed = simd_length(velocity)
+        let swipeHint = current == .sliceHorizontal ? "Swipe sideways" : "Swipe up/down"
         guard speed >= sliceMinSpeed else {
-            progressText = current == .sliceHorizontal
-                ? String(format: "Swipe sideways · %.0f cm/s", speed * 100)
-                : String(format: "Swipe up/down · %.0f cm/s", speed * 100)
+            progressText = String(
+                format: "Slices: %d / %d  ·  %@ · %.0f cm/s",
+                slicesCompleted,
+                sliceTargetCount,
+                swipeHint,
+                speed * 100
+            )
             return
         }
 
@@ -504,7 +539,10 @@ final class TaskManager {
         let insideBlock = abs(local.x) <= blockBounds
             && abs(local.y) <= blockBounds
             && abs(local.z) <= blockBounds
-        guard insideBlock else { return }
+        guard insideBlock else {
+            progressText = "Slices: \(slicesCompleted) / \(sliceTargetCount)  ·  \(swipeHint)"
+            return
+        }
 
         let horizontalMotion = abs(velocity.x) + abs(velocity.z)
         let verticalMotion = abs(velocity.y)
@@ -513,18 +551,57 @@ final class TaskManager {
         case .sliceHorizontal:
             guard horizontalMotion > verticalMotion * 1.05,
                   horizontalMotion > sliceMinSpeed * 0.75 else { return }
-            applyHorizontalSlice()
-            audio?.play(.slice)
-            markComplete()
+            registerSliceHit(horizontal: true, at: now)
         case .sliceVertical:
             guard verticalMotion > horizontalMotion * 1.05,
                   verticalMotion > sliceMinSpeed * 0.75 else { return }
-            applyVerticalSlice()
-            audio?.play(.slice)
-            markComplete()
+            registerSliceHit(horizontal: false, at: now)
         default:
             break
         }
+    }
+
+    private func registerSliceHit(horizontal: Bool, at now: CFTimeInterval) {
+        if horizontal {
+            applyHorizontalSlice()
+        } else {
+            applyVerticalSlice()
+        }
+        audio?.play(.slice)
+        slicesCompleted += 1
+        previousPalmCenter = nil
+        previousSampleTime = nil
+
+        if slicesCompleted >= sliceTargetCount {
+            pendingNextSliceAt = nil
+            markComplete()
+        } else {
+            progressText = "Slices: \(slicesCompleted) / \(sliceTargetCount)"
+            pendingNextSliceAt = now + sliceRespawnDelay
+        }
+    }
+
+    private func updateSliceMotion(at now: CFTimeInterval) {
+        guard let block = sliceBlock, block.isEnabled else { return }
+        let t = Float(now - sliceMotionStart)
+        let phase = t * (2 * Float.pi / sliceDriftPeriod)
+        let offset = sin(phase) * sliceDriftAmplitude
+
+        var right = sliceAnchorRight
+        var up = sliceAnchorUp
+        if sliceDriftIsLateral {
+            right += offset
+        } else {
+            up += offset
+        }
+
+        let center = place(right: right, up: up, forward: sliceAnchorForward)
+        sliceBlockCenter = center
+        block.position = center
+
+        // Mild yaw wobble so the block feels alive and timing matters more.
+        let yaw = sin(phase * 0.75) * sliceYawAmplitude
+        block.orientation = simd_quatf(angle: yaw, axis: SIMD3(0, 1, 0))
     }
 
     private func palmCenter(from worldTransforms: [HandSkeleton.JointName: simd_float4x4]) -> SIMD3<Float>? {
@@ -582,22 +659,26 @@ final class TaskManager {
 
     private func spawnCubes() {
         clearCubes()
-        // Keep both cubes in easy reach, split left/right of center-front.
-        let phantomX: Float = phantomIsLeft ? -0.12 : 0.12
+        // Wider left/right split so both hands reach across more space.
+        let phantomX: Float = phantomIsLeft ? -0.24 : 0.24
         let intactX = -phantomX
+        // Each cube gets its own random height around comfortable hand level.
+        let heightRange: ClosedRange<Float> = (ReachableSpawn.handHeight - 0.10)...(ReachableSpawn.handHeight + 0.10)
+        let cyanUp = Float.random(in: heightRange)
+        let amberUp = Float.random(in: heightRange)
         let cubeSize = cubeHalfSize * 2
         let cyan = ModelEntity(
             mesh: .generateBox(size: cubeSize, cornerRadius: 0.006),
             materials: [SimpleMaterial(color: .cyan, isMetallic: false)]
         )
-        cyan.position = place(right: intactX, up: ReachableSpawn.handHeight, forward: ReachableSpawn.forward)
+        cyan.position = place(right: intactX, up: cyanUp, forward: ReachableSpawn.forward)
         cyan.name = "cyanCube"
 
         let amber = ModelEntity(
             mesh: .generateBox(size: cubeSize, cornerRadius: 0.006),
             materials: [SimpleMaterial(color: .systemOrange, isMetallic: false)]
         )
-        amber.position = place(right: phantomX, up: ReachableSpawn.handHeight, forward: ReachableSpawn.forward)
+        amber.position = place(right: phantomX, up: amberUp, forward: ReachableSpawn.forward)
         amber.name = "amberCube"
 
         cubeRoot.addChild(cyan)
@@ -616,25 +697,48 @@ final class TaskManager {
     private func markComplete() {
         guard !isComplete else { return }
         isComplete = true
-        progressText = "Task complete ✓"
-        celebrationTrigger += 1
+        let isLastTask = (current.rawValue == TaskKind.allCases.count - 1)
+        if isLastTask {
+            grandCelebrationTrigger += 1
+            progressText = "All sessions complete! ✓"
+        } else {
+            celebrationTrigger += 1
+            progressText = "Task complete ✓"
+        }
         audio?.play(.celebrate)
     }
 
     private func spawnSliceBlock() {
         clearSliceBlock()
-        // Bias toward the phantom-hand side at arm reach.
+        // Phantom-side bias, with random lateral / height / depth like bimanual cubes.
         let side: Float = phantomIsLeft ? -1 : 1
-        sliceBlockCenter = place(right: side * 0.18, up: ReachableSpawn.handHeight, forward: ReachableSpawn.forward)
+        sliceAnchorRight = side * Float.random(in: 0.08...0.28)
+        sliceAnchorUp = Float.random(
+            in: (ReachableSpawn.handHeight - 0.10)...(ReachableSpawn.handHeight + 0.10)
+        )
+        sliceAnchorForward = Float.random(in: 0.45...0.58)
+        sliceDriftIsLateral = Bool.random()
+        sliceMotionStart = CACurrentMediaTime()
+        pendingNextSliceAt = nil
 
+        sliceBlockCenter = place(
+            right: sliceAnchorRight,
+            up: sliceAnchorUp,
+            forward: sliceAnchorForward
+        )
+
+        let tint = slicesCompleted % 2 == 0
+            ? UIColor(red: 0.72, green: 0.55, blue: 0.95, alpha: 1)
+            : UIColor(red: 0.55, green: 0.72, blue: 0.95, alpha: 1)
         let block = ModelEntity(
             mesh: .generateBox(size: sliceBlockHalfSize * 2, cornerRadius: 0.004),
-            materials: [SimpleMaterial(color: UIColor(red: 0.72, green: 0.55, blue: 0.95, alpha: 1), roughness: 0.25, isMetallic: false)]
+            materials: [SimpleMaterial(color: tint, roughness: 0.25, isMetallic: false)]
         )
         block.position = sliceBlockCenter
         block.name = "sliceBlock"
         sliceRoot.addChild(block)
         sliceBlock = block
+        progressText = "Slices: \(slicesCompleted) / \(sliceTargetCount)"
     }
 
     private func applyHorizontalSlice() {
@@ -715,5 +819,6 @@ final class TaskManager {
         sliceBlock = nil
         sliceHalfA = nil
         sliceHalfB = nil
+        pendingNextSliceAt = nil
     }
 }

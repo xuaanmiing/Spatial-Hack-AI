@@ -19,13 +19,17 @@ final class CelebrationEffect {
     private let lifetime: CFTimeInterval = 1.8
     private let gravity: Float = -2.4
 
-    func burst(at position: SIMD3<Float>, now: CFTimeInterval) {
+    func burst(at position: SIMD3<Float>, now: CFTimeInterval, isGrand: Bool = false) {
         let colors: [UIColor] = [
             .systemPink, .systemYellow, .systemGreen, .systemCyan,
             .systemOrange, .systemPurple, .systemMint
         ]
 
-        for i in 0..<48 {
+        let count = isGrand ? 150 : 48
+        let speedMultiplier: Float = isGrand ? 1.5 : 1.0
+        let spread: Float = isGrand ? 0.08 : 0.04
+
+        for i in 0..<count {
             let color = colors[i % colors.count]
             let size = Float.random(in: 0.006...0.014)
             let particle = ModelEntity(
@@ -33,18 +37,18 @@ final class CelebrationEffect {
                 materials: [UnlitMaterial(color: color)]
             )
             particle.position = position + SIMD3(
-                Float.random(in: -0.04...0.04),
-                Float.random(in: -0.02...0.05),
-                Float.random(in: -0.04...0.04)
+                Float.random(in: -spread...spread),
+                Float.random(in: -(spread/2)...(spread * 1.25)),
+                Float.random(in: -spread...spread)
             )
             root.addChild(particle)
 
             let direction = SIMD3<Float>(
                 Float.random(in: -1...1),
-                Float.random(in: 0.2...1.4),
+                Float.random(in: 0.2...1.8),
                 Float.random(in: -1...1)
             )
-            let speed = Float.random(in: 0.35...1.1)
+            let speed = Float.random(in: 0.35...1.1) * speedMultiplier
             let normalized = simd_normalize(direction)
             particles.append(
                 Particle(

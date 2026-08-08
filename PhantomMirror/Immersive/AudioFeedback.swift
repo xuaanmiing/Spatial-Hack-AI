@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 import Observation
 
-/// Lightweight synthesized SFX / soft ambient pad for training feedback.
+/// Lightweight synthesized SFX for training feedback.
 @MainActor
 @Observable
 final class AudioFeedback {
@@ -17,10 +17,8 @@ final class AudioFeedback {
 
     private let engine = AVAudioEngine()
     private let sfxNode = AVAudioPlayerNode()
-    private let ambientNode = AVAudioPlayerNode()
     private var format: AVAudioFormat?
     private var isReady = false
-    private var ambientOn = false
 
     var isEnabled = true
 
@@ -39,9 +37,7 @@ final class AudioFeedback {
         self.format = format
 
         engine.attach(sfxNode)
-        engine.attach(ambientNode)
         engine.connect(sfxNode, to: engine.mainMixerNode, format: format)
-        engine.connect(ambientNode, to: engine.mainMixerNode, format: format)
         engine.mainMixerNode.outputVolume = 0.85
 
         do {
@@ -79,22 +75,10 @@ final class AudioFeedback {
         if !sfxNode.isPlaying { sfxNode.play() }
     }
 
-    func startAmbient() {
-        guard isEnabled else { return }
-        prepare()
-        guard isReady, let format, !ambientOn else { return }
-        guard let loop = makeAmbientPad(format: format) else { return }
-        ambientOn = true
-        ambientNode.volume = 0.12
-        ambientNode.scheduleBuffer(loop, at: nil, options: [.loops], completionHandler: nil)
-        if !ambientNode.isPlaying { ambientNode.play() }
-    }
+    /// Ambient pad removed — kept as no-ops so existing call sites stay valid.
+    func startAmbient() {}
 
-    func stopAmbient() {
-        guard ambientOn else { return }
-        ambientNode.stop()
-        ambientOn = false
-    }
+    func stopAmbient() {}
 
     // MARK: - Synthesis
 
@@ -187,26 +171,4 @@ final class AudioFeedback {
         return buffer
     }
 
-    private func makeAmbientPad(format: AVAudioFormat) -> AVAudioPCMBuffer? {
-        let sampleRate = format.sampleRate
-        let duration = 4.0
-        let frameCount = AVAudioFrameCount(sampleRate * duration)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return nil }
-        buffer.frameLength = frameCount
-        guard let data = buffer.floatChannelData?[0] else { return nil }
-
-        let twoPi = 2.0 * Double.pi
-        let tones: [(Double, Float)] = [(174.61, 0.35), (220.0, 0.28), (261.63, 0.22)]
-        for i in 0..<Int(frameCount) {
-            let t = Double(i) / sampleRate
-            var sample: Float = 0
-            for (freq, weight) in tones {
-                sample += Float(sin(twoPi * freq * t)) * weight
-            }
-            // Slow amplitude breathe so the loop feels less static.
-            let breathe = 0.75 + 0.25 * Float(sin(twoPi * (t / duration)))
-            data[i] = sample * 0.08 * breathe
-        }
-        return buffer
-    }
 }
