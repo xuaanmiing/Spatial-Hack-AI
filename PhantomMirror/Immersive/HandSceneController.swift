@@ -58,10 +58,15 @@ final class HandSceneController {
         )
     }
 
-    func attach(to content: RealityViewContent, tasks: TaskManager) {
+    func attach(
+        to content: RealityViewContent,
+        tasks: TaskManager,
+        bricks: BrickBuilderPlayground
+    ) {
         if isBuilt {
             // ImmersiveSpace reuse keeps the same entity graph — wipe leftover props.
             tasks.clearSceneProps()
+            bricks.deactivate()
             celebration.clear()
             lastCelebrationTrigger = 0
             if root.parent == nil { content.add(root) }
@@ -78,6 +83,7 @@ final class HandSceneController {
         root.addChild(tasks.orbRoot)
         root.addChild(tasks.cubeRoot)
         root.addChild(tasks.sliceRoot)
+        root.addChild(bricks.gameRoot)
         root.addChild(celebration.root)
 
         let hint = ModelEntity(
@@ -118,8 +124,12 @@ final class HandSceneController {
         )
     }
 
-    func detachFromImmersiveSpace(clearing tasks: TaskManager? = nil) {
+    func detachFromImmersiveSpace(
+        clearing tasks: TaskManager? = nil,
+        bricks: BrickBuilderPlayground? = nil
+    ) {
         tasks?.clearSceneProps()
+        bricks?.deactivate()
         lastCelebrationTrigger = 0
         lastCelebrationUpdateTime = nil
         lastHeadPose = nil

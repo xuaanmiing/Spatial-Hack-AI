@@ -11,6 +11,7 @@ final class AppState {
         case onboarding
         case calibration
         case training
+        case playground
         case report
     }
 
@@ -128,6 +129,21 @@ final class AppState {
         session.endedAt = Date()
         phase = .report
         immersiveOpen = false
+    }
+
+    /// Free-play brick builder — separate from the training session sequence.
+    func beginPlayground() {
+        taskInstruction = ""
+        trackingStatus = "Opening brick playground…"
+        phase = .playground
+        immersiveOpen = true
+    }
+
+    func endPlayground() {
+        immersiveOpen = false
+        phase = .onboarding
+        taskInstruction = ""
+        trackingStatus = "Waiting for hand tracking…"
     }
 
     func returnToOnboarding() {

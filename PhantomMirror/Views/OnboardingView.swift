@@ -202,6 +202,20 @@ struct OnboardingView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
+
+            Button {
+                appState.beginPlayground()
+            } label: {
+                HStack {
+                    Image(systemName: "square.stack.3d.up.fill")
+                    Text("Brick Builder Playground")
+                }
+                .font(.title3.weight(.bold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
         }
     }
 

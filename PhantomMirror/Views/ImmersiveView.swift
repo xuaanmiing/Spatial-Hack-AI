@@ -8,18 +8,28 @@ struct ImmersiveView: View {
     @Environment(AppState.self) private var appState
     @Environment(HandTrackingManager.self) private var handTracker
     @Environment(TaskManager.self) private var tasks
+    @Environment(BrickBuilderPlayground.self) private var bricks
     @Environment(HandSceneController.self) private var scene
 
     var body: some View {
         RealityView { content in
-            scene.attach(to: content, tasks: tasks)
+            scene.attach(to: content, tasks: tasks, bricks: bricks)
             scene.setHintVisible(true)
         }
+        .gesture(
+            SpatialTapGesture()
+                .targetedToAnyEntity()
+                .onEnded { value in
+                    guard appState.phase == .playground else { return }
+                    bricks.handleSpatialTap(on: value.entity)
+                }
+        )
         // `.visible` keeps passthrough hands above virtual props.
         // `.hidden` draws all virtual content over the real hands.
         .upperLimbVisibility(appState.hideRealUpperLimbs ? .hidden : .visible)
         .task {
             await scene.loadModels()
+            await bricks.loadBrickModels()
             await setupTracking()
         }
         .task(id: appState.phase) {
@@ -31,14 +41,23 @@ struct ImmersiveView: View {
             presentFallbackPhantom()
             if appState.phase == .training {
                 startTrainingTasks()
+            } else if appState.phase == .playground {
+                startBrickPlayground()
             }
         }
         .onChange(of: appState.phase) { _, phase in
-            if phase == .training {
+            switch phase {
+            case .training:
+                bricks.deactivate()
                 startTrainingTasks()
-            } else {
-                // Leaving training must drop props immediately; immersive dismiss can lag.
+            case .playground:
                 tasks.clearSceneProps()
+                scene.celebration.clear()
+                startBrickPlayground()
+            default:
+                // Leaving training/playground must drop props immediately; immersive dismiss can lag.
+                tasks.clearSceneProps()
+                bricks.deactivate()
                 scene.celebration.clear()
             }
         }
@@ -62,8 +81,9 @@ struct ImmersiveView: View {
         }
         .onDisappear {
             tasks.clearSceneProps()
+            bricks.deactivate()
             handTracker.stop()
-            scene.detachFromImmersiveSpace(clearing: tasks)
+            scene.detachFromImmersiveSpace(clearing: tasks, bricks: bricks)
         }
     }
 
@@ -89,7 +109,9 @@ struct ImmersiveView: View {
 
     private func presentFallbackPhantomWhileWaiting() async {
         while !Task.isCancelled {
-            if appState.phase == .calibration || appState.phase == .training {
+            if appState.phase == .calibration
+                || appState.phase == .training
+                || appState.phase == .playground {
                 if let head = handTracker.currentHeadPose() {
                     scene.rememberHeadPose(head)
                     scene.placeHintInFrontOfHead(head)
@@ -135,6 +157,11 @@ struct ImmersiveView: View {
         appState.currentTaskIndex = 0
     }
 
+    private func startBrickPlayground() {
+        bricks.activate()
+        appState.taskInstruction = bricks.instruction
+    }
+
     private func setupTracking() async {
         handTracker.intactChirality = appState.missingSide.intactIsLeft ? .left : .right
         appState.trackingStatus = "Loading hand model… \(scene.statusDetail)"
@@ -159,7 +186,8 @@ struct ImmersiveView: View {
                 appState: appState,
                 handTracker: handTracker,
                 scene: scene,
-                tasks: tasks
+                tasks: tasks,
+                bricks: bricks
             )
         }
 
@@ -186,7 +214,8 @@ struct ImmersiveView: View {
         appState: AppState,
         handTracker: HandTrackingManager,
         scene: HandSceneController,
-        tasks: TaskManager
+        tasks: TaskManager,
+        bricks: BrickBuilderPlayground
     ) {
         guard anchor.isTracked, let skeleton = anchor.handSkeleton else {
             scene.showPreviewOrHide(
@@ -259,6 +288,12 @@ struct ImmersiveView: View {
         let mode = "calibrated skeleton"
         appState.trackingStatus =
             "Tracking \(intactIsLeft ? "left→right" : "right→left") · \(mode) · joints \(scene.jointCountLastFrame)"
+
+        if appState.phase == .playground {
+            bricks.updateBrickInteraction(phantomWorld: scene.lastPhantomWorld)
+            appState.taskInstruction = bricks.instruction
+            return
+        }
 
         guard appState.phase == .training else { return }
 

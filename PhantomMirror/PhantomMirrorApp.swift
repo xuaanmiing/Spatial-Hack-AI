@@ -5,6 +5,7 @@ struct PhantomMirrorApp: App {
     @State private var appState = AppState()
     @State private var handTracker = HandTrackingManager()
     @State private var tasks = TaskManager()
+    @State private var bricks = BrickBuilderPlayground()
     @State private var handScene = HandSceneController()
     @State private var audio = AudioFeedback()
 
@@ -14,6 +15,7 @@ struct PhantomMirrorApp: App {
                 .environment(appState)
                 .environment(handTracker)
                 .environment(tasks)
+                .environment(bricks)
                 .environment(handScene)
                 .environment(audio)
                 .onAppear {
@@ -29,6 +31,7 @@ struct PhantomMirrorApp: App {
                 .environment(appState)
                 .environment(handTracker)
                 .environment(tasks)
+                .environment(bricks)
                 .environment(handScene)
                 .environment(audio)
                 .onAppear {
@@ -68,6 +71,12 @@ struct RootView: View {
                     TrainingHUD()
                         .padding()
                 }
+            case .playground:
+                ZStack(alignment: .center) {
+                    Color.clear
+                    PlaygroundHUD()
+                        .padding()
+                }
             case .report:
                 ReportView()
             }
@@ -79,7 +88,7 @@ struct RootView: View {
             switch phase {
             case .training:
                 audio.startAmbient()
-            case .welcome, .onboarding, .calibration, .report:
+            case .welcome, .onboarding, .calibration, .playground, .report:
                 audio.stopAmbient()
             }
         }
