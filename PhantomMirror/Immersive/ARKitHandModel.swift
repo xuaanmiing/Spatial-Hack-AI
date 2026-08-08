@@ -4,113 +4,180 @@ import ARKit
 import simd
 import UIKit
 
-/// Loads and drives `RightHand_ARKit27.usdz` (27 joints = HandSkeleton.JointName order).
+/// Loads a rigged hand/forearm USDZ and drives it from an ARKit `HandSkeleton`.
+///
+/// Joints are matched by **name**, not by array index: different assets author their
+/// skeletons in different orders (Apple's own gloves disagree with each other), so an
+/// index-based mapping silently swaps fingers.
 @MainActor
 final class ARKitHandModel {
+    /// Asset names tried in order; first one present in the bundle wins.
+    private static let candidateAssets = ["HandArm_Right", "RightHand_ARKit27"]
+
     private(set) var root = Entity()
     private(set) var model: ModelEntity?
     private(set) var isLoaded = false
     private(set) var loadError: String?
-    private(set) var jointCount: Int = 0
+    private(set) var assetName: String?
+
+    /// modelJointIndex -> ARKit joint that drives it.
+    private var jointMap: [(index: Int, name: HandSkeleton.JointName)] = []
+    var jointCount: Int { jointMap.count }
+
+    /// Authored rest pose captured at load — translations are reapplied each frame so
+    /// debug joint offsets never accumulate.
+    private var restJointTransforms: [Transform] = []
+
+    /// Apple's sample drives every joint including the wrist. If the hand ends up
+    /// rotated on device, set this to false to keep the asset's authored wrist rest pose.
+    var drivesWristRotation = true
 
     let name: String
+    private let tint: UIColor
 
-    /// Bright unlit skin so the hand stays visible in Vision Pro passthrough.
-    private static let visibleMaterial = UnlitMaterial(
-        color: UIColor(red: 1.0, green: 0.72, blue: 0.55, alpha: 1.0)
-    )
-
-    init(name: String) {
+    init(name: String, tint: UIColor = UIColor(red: 0.88, green: 0.67, blue: 0.56, alpha: 1.0)) {
         self.name = name
+        self.tint = tint
         root.name = name
     }
 
     func loadFromBundle() async {
         guard !isLoaded else { return }
 
-        do {
-            let entity: Entity
-            if let url = Bundle.main.url(forResource: "RightHand_ARKit27", withExtension: "usdz") {
-                entity = try await Entity(contentsOf: url)
-            } else if let url = Bundle.main.url(forResource: "RightHand_ARKit27", withExtension: "usdc") {
-                entity = try await Entity(contentsOf: url)
-            } else {
-                entity = try await Entity(named: "RightHand_ARKit27")
+        var lastError: String?
+        for asset in Self.candidateAssets {
+            guard let url = Self.bundleURL(for: asset) else {
+                lastError = "\(asset) not in bundle"
+                continue
             }
+            do {
+                let entity = try await Entity(contentsOf: url)
+                // Keep the whole SkelRoot hierarchy. Re-parenting just the mesh
+                // makes RealityKit drop the skin binding and jointTransforms.
+                entity.name = "\(name)-asset"
+                root.addChild(entity)
 
-            // Keep the full SkelRoot hierarchy — do NOT re-parent the mesh alone
-            // or RealityKit can drop jointTransforms / skin binding.
-            entity.name = "\(name)-asset"
-            root.addChild(entity)
+                if let skinned = Self.findSkinnedModel(in: entity) {
+                    model = skinned
+                    jointMap = Self.buildJointMap(for: skinned.jointNames)
+                    restJointTransforms = skinned.jointTransforms
+                    applyMaterial(to: skinned)
+                } else {
+                    model = nil
+                    jointMap = []
+                    restJointTransforms = []
+                    loadError = "no skinned mesh in \(asset)"
+                    Self.forEachModel(in: entity) { applyMaterial(to: $0) }
+                }
 
-            let modelEntity = Self.findSkinnedModel(in: entity)
-            if let modelEntity {
-                Self.applyVisibleMaterials(to: modelEntity)
-                model = modelEntity
-                jointCount = modelEntity.jointNames.count
-            } else {
-                Self.applyVisibleMaterialsRecursively(to: entity)
-                model = nil
-                jointCount = 0
-                loadError = "USDZ loaded but no skinned ModelEntity (joints unavailable)"
+                assetName = asset
+                isLoaded = true
+                root.isEnabled = false
+                if jointMap.isEmpty, loadError == nil {
+                    loadError = "0 joints matched in \(asset)"
+                }
+                return
+            } catch {
+                lastError = "\(asset): \(error.localizedDescription)"
             }
-
-            if jointCount == 0, loadError == nil {
-                loadError = "Model has 0 jointTransforms"
-            }
-
-            isLoaded = true
-            root.isEnabled = false
-        } catch {
-            loadError = String(describing: error)
-            isLoaded = false
         }
+
+        loadError = lastError ?? "no hand asset found"
+        isLoaded = false
     }
 
     func setVisible(_ visible: Bool) {
         root.isEnabled = visible
     }
 
-    /// Place wrist in world and apply per-joint parent-relative poses.
-    /// - Parameter mirrorMeshX: flip mesh in X (use for showing a left hand with a right-handed USDZ).
+    /// Pose the model from a tracked hand.
+    /// - Parameters:
+    ///   - mirrored: reflect joint rotations across the sagittal plane (drives the phantom side).
+    ///   - mirrorMeshX: flip the mesh in X, for showing this right-handed asset as a left hand.
+    ///   - jointOffsets: parent-local translation nudges (meters) for debug / retargeting.
     func apply(
+        skeleton: HandSkeleton,
         wristWorld: simd_float4x4,
-        jointLocals: [HandSkeleton.JointName: simd_float4x4],
+        mirrored: Bool,
         scale: Float = 1.0,
-        mirrorMeshX: Bool = false
+        mirrorMeshX: Bool = false,
+        jointOffsets: [HandSkeleton.JointName: SIMD3<Float>] = [:]
     ) {
-        root.isEnabled = true
-        // Set pose via Transform so scale isn't clobbered incorrectly.
-        var t = Transform(matrix: wristWorld)
-        let s = abs(scale)
-        t.scale = SIMD3(mirrorMeshX ? -s : s, s, s)
-        root.transform = t
+        place(wristWorld: wristWorld, scale: scale, mirrorMeshX: mirrorMeshX)
 
-        guard let model else { return }
-        var transforms = model.jointTransforms
-        let count = min(transforms.count, model.jointNames.count)
-        guard count > 0 else { return }
-
-        let transformsByName = Dictionary(
-            uniqueKeysWithValues: jointLocals.map {
-                (String(describing: $0.key), $0.value)
+        guard let model, !jointMap.isEmpty else { return }
+        var transforms = restJointTransforms.isEmpty ? model.jointTransforms : restJointTransforms
+        guard transforms.count == model.jointTransforms.count else {
+            transforms = model.jointTransforms
+        }
+        for entry in jointMap where entry.index < transforms.count {
+            if entry.name == .wrist && !drivesWristRotation {
+                let base = restTranslation(at: entry.index, fallback: transforms[entry.index].translation)
+                transforms[entry.index].translation = base + (jointOffsets[entry.name] ?? .zero)
+                continue
             }
-        )
-        for i in 0..<count {
-            let modelJointName = model.jointNames[i]
-            let shortName = modelJointName.split(separator: "/").last.map(String.init) ?? modelJointName
-            guard let local = transformsByName[shortName] else { continue }
-            transforms[i] = Transform(matrix: local)
+            var local = skeleton.joint(entry.name).parentFromJointTransform
+            if mirrored {
+                local = MirrorTransform.mirrorLocalJoint(local)
+            }
+            // Rotation from ARKit; translation from the asset rest pose (+ optional debug offset).
+            let base = restTranslation(at: entry.index, fallback: transforms[entry.index].translation)
+            transforms[entry.index].rotation = simd_quatf(local)
+            transforms[entry.index].translation = base + (jointOffsets[entry.name] ?? .zero)
         }
         model.jointTransforms = transforms
     }
 
-    func applyRestPose(wristWorld: simd_float4x4, scale: Float = 1.0, mirrorMeshX: Bool = false) {
+    /// Show the authored rest pose at a given wrist placement (simulator / preview).
+    func applyRestPose(
+        wristWorld: simd_float4x4,
+        scale: Float = 1.0,
+        mirrorMeshX: Bool = false,
+        jointOffsets: [HandSkeleton.JointName: SIMD3<Float>] = [:]
+    ) {
+        place(wristWorld: wristWorld, scale: scale, mirrorMeshX: mirrorMeshX)
+        guard let model, !restJointTransforms.isEmpty else { return }
+        var transforms = restJointTransforms
+        for entry in jointMap where entry.index < transforms.count {
+            let base = restTranslation(at: entry.index, fallback: transforms[entry.index].translation)
+            transforms[entry.index].translation = base + (jointOffsets[entry.name] ?? .zero)
+        }
+        model.jointTransforms = transforms
+    }
+
+    private func restTranslation(at index: Int, fallback: SIMD3<Float>) -> SIMD3<Float> {
+        guard index < restJointTransforms.count else { return fallback }
+        return restJointTransforms[index].translation
+    }
+
+    private func place(wristWorld: simd_float4x4, scale: Float, mirrorMeshX: Bool) {
         root.isEnabled = true
         var t = Transform(matrix: wristWorld)
         let s = abs(scale)
         t.scale = SIMD3(mirrorMeshX ? -s : s, s, s)
         root.transform = t
+    }
+
+    private func applyMaterial(to model: ModelEntity) {
+        var material = PhysicallyBasedMaterial()
+        material.baseColor = .init(tint: tint)
+        material.roughness = 0.55
+        material.metallic = 0.0
+        // Keeps the limb readable against bright passthrough even with weak scene lighting.
+        material.emissiveColor = .init(color: tint)
+        material.emissiveIntensity = 0.25
+
+        let count = max(model.model?.materials.count ?? 1, 1)
+        model.model?.materials = Array(repeating: material, count: count)
+    }
+
+    private static func bundleURL(for asset: String) -> URL? {
+        for ext in ["usdz", "usdc", "usda"] {
+            if let url = Bundle.main.url(forResource: asset, withExtension: ext) {
+                return url
+            }
+        }
+        return nil
     }
 
     private static func findSkinnedModel(in entity: Entity) -> ModelEntity? {
@@ -122,40 +189,84 @@ final class ARKitHandModel {
                 return found
             }
         }
-        // Prefer any ModelEntity even without joints (static mesh fallback).
-        if let model = entity as? ModelEntity {
-            return model
-        }
-        for child in entity.children {
-            if let model = child as? ModelEntity {
-                return model
-            }
-            if let found = findAnyModel(in: child) {
-                return found
-            }
-        }
         return nil
     }
 
-    private static func findAnyModel(in entity: Entity) -> ModelEntity? {
-        if let model = entity as? ModelEntity { return model }
-        for child in entity.children {
-            if let found = findAnyModel(in: child) { return found }
+    private static func forEachModel(in entity: Entity, _ body: (ModelEntity) -> Void) {
+        if let model = entity as? ModelEntity { body(model) }
+        for child in entity.children { forEachModel(in: child, body) }
+    }
+
+    // MARK: - Joint name matching
+
+    /// Matches both ARKit-style names ("indexFingerKnuckle") and Apple's glove rig
+    /// names ("right_handIndex_1_joint"), so any of our assets can drive the same code.
+    private static func buildJointMap(for jointNames: [String]) -> [(index: Int, name: HandSkeleton.JointName)] {
+        var map: [(Int, HandSkeleton.JointName)] = []
+        var used = Set<String>()
+
+        for (index, raw) in jointNames.enumerated() {
+            let leaf = raw.split(separator: "/").last.map(String.init) ?? raw
+            guard let joint = jointName(from: leaf) else { continue }
+            // First match wins, so a stray duplicate can't hijack a finger.
+            let key = String(describing: joint)
+            if used.contains(key) { continue }
+            used.insert(key)
+            map.append((index, joint))
         }
+        return map
+    }
+
+    private static func jointName(from leaf: String) -> HandSkeleton.JointName? {
+        // Exact ARKit case name (our procedural asset).
+        for joint in HandSkeleton.JointName.allCases where String(describing: joint) == leaf {
+            return joint
+        }
+
+        let s = leaf.lowercased()
+
+        if s.contains("twist") { return .forearmWrist }
+        if s.contains("forearm") { return .forearmArm }
+
+        let finger: (metacarpal: HandSkeleton.JointName,
+                     knuckle: HandSkeleton.JointName,
+                     base: HandSkeleton.JointName,
+                     tip1: HandSkeleton.JointName,
+                     tip: HandSkeleton.JointName)?
+
+        if s.contains("thumb") {
+            // Thumb has one fewer segment; handled separately below.
+            if s.contains("start") { return .thumbKnuckle }
+            if s.contains("end") { return .thumbTip }
+            if s.contains("_1") { return .thumbIntermediateBase }
+            if s.contains("_2") { return .thumbIntermediateTip }
+            return nil
+        } else if s.contains("index") {
+            finger = (.indexFingerMetacarpal, .indexFingerKnuckle, .indexFingerIntermediateBase,
+                      .indexFingerIntermediateTip, .indexFingerTip)
+        } else if s.contains("mid") {
+            finger = (.middleFingerMetacarpal, .middleFingerKnuckle, .middleFingerIntermediateBase,
+                      .middleFingerIntermediateTip, .middleFingerTip)
+        } else if s.contains("ring") {
+            finger = (.ringFingerMetacarpal, .ringFingerKnuckle, .ringFingerIntermediateBase,
+                      .ringFingerIntermediateTip, .ringFingerTip)
+        } else if s.contains("pinky") || s.contains("little") {
+            finger = (.littleFingerMetacarpal, .littleFingerKnuckle, .littleFingerIntermediateBase,
+                      .littleFingerIntermediateTip, .littleFingerTip)
+        } else {
+            finger = nil
+        }
+
+        if let f = finger {
+            if s.contains("start") { return f.metacarpal }
+            if s.contains("end") { return f.tip }
+            if s.contains("_1") { return f.knuckle }
+            if s.contains("_2") { return f.base }
+            if s.contains("_3") { return f.tip1 }
+            return nil
+        }
+
+        if s.contains("hand") || s.contains("wrist") { return .wrist }
         return nil
-    }
-
-    private static func applyVisibleMaterials(to model: ModelEntity) {
-        let count = max(model.model?.materials.count ?? 1, 1)
-        model.model?.materials = Array(repeating: visibleMaterial, count: count)
-    }
-
-    private static func applyVisibleMaterialsRecursively(to entity: Entity) {
-        if let model = entity as? ModelEntity {
-            applyVisibleMaterials(to: model)
-        }
-        for child in entity.children {
-            applyVisibleMaterialsRecursively(to: child)
-        }
     }
 }

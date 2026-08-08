@@ -75,7 +75,10 @@ struct OnboardingView: View {
 
     private var options: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Toggle("Show virtual intact hand", isOn: Bindable(appState).showVirtualIntactHand)
+            Toggle("Also show virtual intact hand", isOn: Bindable(appState).showVirtualIntactHand)
+            Text("Off by default — only the phantom (missing) arm is shown.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
             Toggle("Hide real upper limbs", isOn: Bindable(appState).hideRealUpperLimbs)
         }
     }

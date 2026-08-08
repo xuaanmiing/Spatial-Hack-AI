@@ -7,13 +7,25 @@ struct CalibrationPanel: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Calibrate phantom hand")
                 .font(.title2.bold())
-            Text("Move the virtual phantom until it sits where you feel the missing limb. Use this for telescoping (shortened phantom) compensation.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
 
-            offsetControls
-            scaleControls
-            yawControls
+            Picker("Calibration mode", selection: Bindable(appState).calibrationTab) {
+                ForEach(AppState.CalibrationTab.allCases) { tab in
+                    Text(tab.title).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            switch appState.calibrationTab {
+            case .pose:
+                Text("Move the virtual phantom until it sits where you feel the missing limb. Use this for telescoping (shortened phantom) compensation.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                offsetControls
+                scaleControls
+                yawControls
+            case .joints:
+                JointDebugPanel()
+            }
 
             Text(appState.trackingStatus)
                 .font(.caption)
@@ -21,7 +33,14 @@ struct CalibrationPanel: View {
 
             HStack {
                 Button("Reset") {
-                    appState.calibration = CalibrationData()
+                    if appState.calibrationTab == .joints {
+                        appState.resetAllJointOffsets()
+                    } else {
+                        let joints = appState.calibration.jointOffsets
+                        var next = CalibrationData()
+                        next.jointOffsets = joints
+                        appState.calibration = next
+                    }
                 }
                 .buttonStyle(.bordered)
 
@@ -34,7 +53,7 @@ struct CalibrationPanel: View {
             }
         }
         .padding(24)
-        .frame(minWidth: 360, maxWidth: 420)
+        .frame(minWidth: 420, maxWidth: 520)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
     }
 

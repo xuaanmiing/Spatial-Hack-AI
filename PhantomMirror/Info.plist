@@ -23,13 +23,15 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSHandsTrackingUsageDescription</key>
-	<string>PhantomMirror tracks your intact hand joints to drive a mirrored virtual phantom hand for a mirror-therapy demonstration. Hand data stays on-device.</string>
+	<string>Track phantom hand</string>
 	<key>NSWorldSensingUsageDescription</key>
 	<string>World sensing provides head pose so the phantom hand mirrors correctly across your body midline.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationPreferredDefaultSceneSessionRole</key>
 		<string>UIWindowSceneSessionRoleApplication</string>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
 		<key>UISceneConfigurations</key>
 		<dict/>
 	</dict>

@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import simd
+import ARKit
 
 @MainActor
 @Observable
@@ -10,6 +11,20 @@ final class AppState {
         case calibration
         case training
         case report
+    }
+
+    enum CalibrationTab: String, CaseIterable, Identifiable {
+        case pose
+        case joints
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .pose: return "Pose"
+            case .joints: return "Joints"
+            }
+        }
     }
 
     enum MissingSide: String, CaseIterable, Identifiable {
@@ -41,14 +56,40 @@ final class AppState {
     var calibration = CalibrationData()
     var session = SessionReport()
     var immersiveOpen = false
-    var showVirtualIntactHand = true
+    /// Optional demo overlay of the intact side. Classic mirror therapy shows only the phantom.
+    var showVirtualIntactHand = false
     var hideRealUpperLimbs = true
+
+    /// Calibration UI: whole-hand pose vs per-joint debug offsets.
+    var calibrationTab: CalibrationTab = .pose
+    /// Currently selected joint in the joint-debug list.
+    var selectedJoint: HandSkeleton.JointName = .wrist
+    /// Joint nudge step in meters (UI can change this).
+    var jointOffsetStep: Float = CalibrationData.jointOffsetStep
 
     /// Live status for HUD.
     var trackingStatus: String = "Waiting for hand tracking…"
     var handUpdateIntervalMs: Double = 0
     var currentTaskIndex: Int = 0
     var taskInstruction: String = ""
+
+    func nudgeSelectedJoint(axis: Int, delta: Float) {
+        var next = calibration
+        next.nudge(selectedJoint, axis: axis, delta: delta)
+        calibration = next
+    }
+
+    func resetSelectedJointOffset() {
+        var next = calibration
+        next.setOffset(.zero, for: selectedJoint)
+        calibration = next
+    }
+
+    func resetAllJointOffsets() {
+        var next = calibration
+        next.resetJointOffsets()
+        calibration = next
+    }
 
     func resetSession() {
         session = SessionReport()

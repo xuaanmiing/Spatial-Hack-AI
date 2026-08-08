@@ -32,10 +32,28 @@ struct ImmersiveView: View {
         }
         .onChange(of: appState.missingSide) { _, _ in
             handTracker.intactChirality = appState.missingSide.intactIsLeft ? .left : .right
+            refreshPreviewIfNeeded()
+        }
+        .onChange(of: appState.calibration) { _, _ in
+            refreshPreviewIfNeeded()
+        }
+        .onChange(of: appState.showVirtualIntactHand) { _, _ in
+            refreshPreviewIfNeeded()
         }
         .onDisappear {
             handTracker.stop()
         }
+    }
+
+    private func refreshPreviewIfNeeded() {
+        // Live tracking already reapplies offsets every frame; only refresh static preview.
+        guard handTracker.authorizationDenied else { return }
+        scene.showPreview(
+            showIntact: appState.showVirtualIntactHand,
+            phantomIsLeft: appState.missingSide == .left,
+            jointOffsets: appState.calibration.jointOffsetMap,
+            phantomScale: appState.calibration.phantomScale
+        )
     }
 
     private func startTrainingTasks() {
@@ -73,7 +91,12 @@ struct ImmersiveView: View {
         if handTracker.authorizationDenied {
             let detail = handTracker.lastErrorDescription ?? "unsupported"
             appState.trackingStatus = "Preview mode — \(detail) · \(scene.statusDetail)"
-            scene.showPreview(showIntact: appState.showVirtualIntactHand)
+            scene.showPreview(
+                showIntact: appState.showVirtualIntactHand,
+                phantomIsLeft: appState.missingSide == .left,
+                jointOffsets: appState.calibration.jointOffsetMap,
+                phantomScale: appState.calibration.phantomScale
+            )
             return
         }
 
