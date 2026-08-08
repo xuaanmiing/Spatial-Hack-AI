@@ -193,9 +193,8 @@ struct ImmersiveView: View {
             scene.jointMarkers.setVisible(false)
         }
 
-        let mode = scene.usingFallback ? "procedural" : "USDZ"
         appState.trackingStatus =
-            "Tracking \(intactIsLeft ? "left→right" : "right→left") · \(mode) · joints \(scene.jointCountLastFrame)"
+            "Tracking \(intactIsLeft ? "left→right" : "right→left") · skinned hand · joints \(scene.jointCountLastFrame)"
 
         guard appState.phase == .training else { return }
 
