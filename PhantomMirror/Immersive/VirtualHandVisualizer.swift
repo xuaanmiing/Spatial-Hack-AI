@@ -10,18 +10,12 @@ final class VirtualHandVisualizer {
     let root = Entity()
     private var jointEntities: [HandSkeleton.JointName: ModelEntity] = [:]
     private var boneEntities: [String: ModelEntity] = [:]
-    private var skinJointEntities: [HandSkeleton.JointName: ModelEntity] = [:]
-    private var skinBoneEntities: [String: ModelEntity] = [:]
-    private let palmEntity: ModelEntity
 
     /// Larger than real joints so the demo is obvious in passthrough.
-    private let jointRadius: Float = 0.014
+    private let jointRadius: Float = 0.007
     private let boneRadius: Float = 0.006
-    private let skinJointRadius: Float = 0.024
-    private let skinBoneRadius: Float = 0.016
     private let jointMaterial: UnlitMaterial
     private let boneMaterial: UnlitMaterial
-    private let skinMaterial: PhysicallyBasedMaterial
 
     private static let bonePairs: [(HandSkeleton.JointName, HandSkeleton.JointName)] = [
         (.wrist, .forearmWrist),
@@ -61,43 +55,6 @@ final class VirtualHandVisualizer {
         root.name = name
         jointMaterial = UnlitMaterial(color: color)
         boneMaterial = UnlitMaterial(color: color.withAlphaComponent(0.9))
-        var skin = PhysicallyBasedMaterial()
-        skin.baseColor = .init(tint: UIColor(red: 0.86, green: 0.62, blue: 0.50, alpha: 0.78))
-        skin.roughness = 0.34
-        skin.metallic = 0.0
-        skinMaterial = skin
-
-        palmEntity = ModelEntity(
-            mesh: .generateBox(size: SIMD3<Float>(0.11, 0.035, 0.09), cornerRadius: 0.025),
-            materials: [skinMaterial]
-        )
-        palmEntity.name = "\(name)-skin-palm"
-        palmEntity.isEnabled = false
-        root.addChild(palmEntity)
-
-        for jointName in HandSkeleton.JointName.allCases {
-            let sphere = ModelEntity(
-                mesh: .generateSphere(radius: skinJointRadius),
-                materials: [skinMaterial]
-            )
-            sphere.name = "\(name)-skin-\(jointName)"
-            sphere.isEnabled = false
-            root.addChild(sphere)
-            skinJointEntities[jointName] = sphere
-        }
-
-        for (child, parent) in Self.bonePairs {
-            let key = "\(child)-\(parent)"
-            let radius = Self.isForearmPair(child, parent) ? skinBoneRadius * 1.8 : skinBoneRadius
-            let bone = ModelEntity(
-                mesh: .generateCylinder(height: 1, radius: radius),
-                materials: [skinMaterial]
-            )
-            bone.name = "\(name)-skin-bone-\(key)"
-            bone.isEnabled = false
-            root.addChild(bone)
-            skinBoneEntities[key] = bone
-        }
 
         for jointName in HandSkeleton.JointName.allCases {
             let sphere = ModelEntity(
@@ -144,10 +101,6 @@ final class VirtualHandVisualizer {
         }
 
         for (name, transform) in displayedTransforms {
-            if let entity = skinJointEntities[name] {
-                entity.isEnabled = true
-                entity.setTransformMatrix(transform, relativeTo: nil)
-            }
             guard let entity = jointEntities[name] else { continue }
             entity.isEnabled = true
             entity.setTransformMatrix(transform, relativeTo: nil)
@@ -156,18 +109,12 @@ final class VirtualHandVisualizer {
         for (name, entity) in jointEntities where displayedTransforms[name] == nil {
             entity.isEnabled = false
         }
-        for (name, entity) in skinJointEntities where displayedTransforms[name] == nil {
-            entity.isEnabled = false
-        }
-
-        updatePalm(from: displayedTransforms)
 
         for (child, parent) in Self.bonePairs {
             let key = "\(child)-\(parent)"
             guard let childT = displayedTransforms[child],
                   let parentT = displayedTransforms[parent] else {
                 boneEntities[key]?.isEnabled = false
-                skinBoneEntities[key]?.isEnabled = false
                 continue
             }
 
@@ -177,43 +124,13 @@ final class VirtualHandVisualizer {
             let length = simd_length(dir)
             guard length > 0.001 else {
                 boneEntities[key]?.isEnabled = false
-                skinBoneEntities[key]?.isEnabled = false
                 continue
             }
 
-            if let skinBone = skinBoneEntities[key] {
-                updateCylinder(skinBone, from: a, to: b)
-            }
             if let bone = boneEntities[key] {
                 updateCylinder(bone, from: a, to: b)
             }
         }
-    }
-
-    private func updatePalm(from transforms: [HandSkeleton.JointName: simd_float4x4]) {
-        guard let wrist = transforms[.wrist]?.translation,
-              let index = transforms[.indexFingerMetacarpal]?.translation,
-              let middle = transforms[.middleFingerMetacarpal]?.translation,
-              let little = transforms[.littleFingerMetacarpal]?.translation else {
-            palmEntity.isEnabled = false
-            return
-        }
-
-        let center = (wrist + index + middle + little) * 0.25
-        let across = simd_normalize(little - index)
-        let forward = simd_normalize(middle - wrist)
-        let normal = simd_normalize(simd_cross(across, forward))
-        let correctedForward = simd_cross(normal, across)
-        palmEntity.isEnabled = true
-        palmEntity.setTransformMatrix(
-            simd_float4x4(columns: (
-                SIMD4(across.x * 0.75, across.y * 0.75, across.z * 0.75, 0),
-                SIMD4(normal.x, normal.y, normal.z, 0),
-                SIMD4(correctedForward.x, correctedForward.y, correctedForward.z, 0),
-                SIMD4(center.x, center.y, center.z, 1)
-            )),
-            relativeTo: nil
-        )
     }
 
     private func updateCylinder(_ entity: ModelEntity, from a: SIMD3<Float>, to b: SIMD3<Float>) {
@@ -232,10 +149,6 @@ final class VirtualHandVisualizer {
             SIMD4(mid.x, mid.y, mid.z, 1)
         ))
         entity.setTransformMatrix(matrix, relativeTo: nil)
-    }
-
-    private static func isForearmPair(_ a: HandSkeleton.JointName, _ b: HandSkeleton.JointName) -> Bool {
-        (a == .wrist && b == .forearmWrist) || (a == .forearmWrist && b == .forearmArm)
     }
 
     func gripOpenness(from worldTransforms: [HandSkeleton.JointName: simd_float4x4]) -> Float? {

@@ -12,16 +12,14 @@ import UIKit
 final class HandSceneController {
     let root = Entity()
 
-    /// Deprecated skin model path. Kept loaded type-safe but intentionally hidden;
-    /// the calibrated procedural skeleton is the source of truth for the demo.
+    /// Model roots are kept only so existing project references stay harmless.
+    /// The visible phantom hand is the calibrated procedural skeleton below.
     let phantomUSDZ = ARKitHandModel(name: "phantomUSDZ")
-    /// Deprecated intact skin model path.
     let intactUSDZ = ARKitHandModel(
         name: "intactUSDZ",
         tint: UIColor(red: 0.62, green: 0.78, blue: 0.88, alpha: 1.0)
     )
 
-    /// Fallback procedural skeleton if USDZ fails to load / has no joints.
     private let fallbackIntact: VirtualHandVisualizer
     private let fallbackPhantom: VirtualHandVisualizer
 
@@ -35,9 +33,10 @@ final class HandSceneController {
     private(set) var statusDetail: String = "Models not loaded"
     private(set) var jointCountLastFrame: Int = 0
     private(set) var usingFallback: Bool = false
+    private var mirrorReferenceHeadPose: simd_float4x4?
 
-    /// Most recent phantom-hand world transforms — reused by the marker overlay
-    /// so it doesn't have to recompute the mirror math itself.
+    /// Most recent hand world transforms — reused by overlays and training tasks.
+    private(set) var lastIntactWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
     private(set) var lastPhantomWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
 
     /// Tip positions for training tasks (world space).
@@ -86,14 +85,11 @@ final class HandSceneController {
     }
 
     func loadModels() async {
-        // The USDZ skin model is intentionally disabled: the calibration dots are
-        // already aligned correctly, so the procedural skeleton now uses those
-        // calibrated joint positions as the final render source.
         phantomUSDZ.setVisible(false)
         intactUSDZ.setVisible(false)
         usingFallback = true
         modelsReady = true
-        statusDetail = "Calibrated skeleton"
+        statusDetail = "Blue calibrated skeleton"
     }
 
     func setHintVisible(_ visible: Bool) {
@@ -101,6 +97,7 @@ final class HandSceneController {
     }
 
     func detachFromImmersiveSpace() {
+        mirrorReferenceHeadPose = nil
         root.removeFromParent()
     }
 
@@ -121,16 +118,23 @@ final class HandSceneController {
             intactWorld[name] = wristWorld * joint.anchorFromJointTransform
         }
 
+        if mirrorReferenceHeadPose == nil {
+            mirrorReferenceHeadPose = headPose
+        }
+        let referenceHeadPose = mirrorReferenceHeadPose ?? headPose
+
         var phantomWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
         for (name, worldT) in intactWorld {
-            let mirrored = MirrorTransform.mirror(worldT, headPose: headPose)
+            let mirrored = MirrorTransform.mirror(worldT, headPose: referenceHeadPose)
             phantomWorld[name] = MirrorTransform.applyCalibration(
                 mirrored,
                 calibration: calibration,
-                headPose: headPose
+                headPose: referenceHeadPose
             )
         }
+        phantomWorld = Self.applyJointOffsets(calibration.jointOffsetMap, to: phantomWorld)
 
+        lastIntactWorld = intactWorld
         lastIntactIndexTip = intactWorld[.indexFingerTip]?.translation
         lastPhantomIndexTip = phantomWorld[.indexFingerTip]?.translation
         lastPhantomOpenness = fallbackPhantom.gripOpenness(from: phantomWorld)
@@ -150,6 +154,7 @@ final class HandSceneController {
         }
     }
 
+
     func hideHands(showHint: Bool = true) {
         phantomUSDZ.setVisible(false)
         intactUSDZ.setVisible(false)
@@ -158,13 +163,14 @@ final class HandSceneController {
         jointMarkers.hideAll()
         setHintVisible(showHint)
         jointCountLastFrame = 0
+        lastIntactWorld = [:]
         lastIntactIndexTip = nil
         lastPhantomIndexTip = nil
         lastPhantomOpenness = nil
         lastPhantomWorld = [:]
     }
 
-    /// Simulator / no-tracking: show USDZ rest pose (or procedural) in front of user.
+    /// Simulator / no-tracking: show the procedural skeleton in front of user.
     /// - Parameter phantomIsLeft: `true` when the missing (phantom) side is the left hand.
     func showPreview(
         showIntact: Bool,
@@ -177,19 +183,10 @@ final class HandSceneController {
         let rightWristPos = SIMD3<Float>(0.18, 1.25, -0.45)
         let phantomPos = phantomIsLeft ? leftWristPos : rightWristPos
         let intactPos = phantomIsLeft ? rightWristPos : leftWristPos
-        let phantomWrist = Self.makeWristMatrix(at: phantomPos)
-        let intactWrist = Self.makeWristMatrix(at: intactPos)
-        // Asset is right-handed; flip X only when placing a left phantom / left intact.
-        let phantomMirrorX = phantomIsLeft
-        let intactMirrorX = !phantomIsLeft
-
-        _ = phantomWrist
-        _ = intactWrist
-        _ = phantomMirrorX
-        _ = intactMirrorX
-        _ = jointOffsets
-
-        let phantomPose = Self.makePreviewHandPose(wrist: phantomPos, isLeft: phantomIsLeft)
+        let phantomPose = Self.applyJointOffsets(
+            jointOffsets,
+            to: Self.makePreviewHandPose(wrist: phantomPos, isLeft: phantomIsLeft)
+        )
         let intactPose = Self.makePreviewHandPose(wrist: intactPos, isLeft: !phantomIsLeft)
         phantomUSDZ.setVisible(false)
         intactUSDZ.setVisible(false)
@@ -198,16 +195,26 @@ final class HandSceneController {
         fallbackPhantom.setVisible(true)
         fallbackPhantom.update(worldTransforms: phantomPose, scale: phantomScale)
         jointCountLastFrame = phantomPose.count
+        lastIntactWorld = intactPose
         lastIntactIndexTip = intactPose[.indexFingerTip]?.translation
         lastPhantomIndexTip = phantomPose[.indexFingerTip]?.translation
         lastPhantomOpenness = 0.12
         lastPhantomWorld = phantomPose
     }
 
-    private static func makeWristMatrix(at p: SIMD3<Float>) -> simd_float4x4 {
-        var m = matrix_identity_float4x4
-        m.columns.3 = SIMD4(p.x, p.y, p.z, 1)
-        return m
+    private static func applyJointOffsets(
+        _ offsets: [HandSkeleton.JointName: SIMD3<Float>],
+        to transforms: [HandSkeleton.JointName: simd_float4x4]
+    ) -> [HandSkeleton.JointName: simd_float4x4] {
+        guard !offsets.isEmpty else { return transforms }
+
+        var adjusted = transforms
+        for (joint, offset) in offsets {
+            guard var transform = adjusted[joint] else { continue }
+            transform.columns.3 += SIMD4(offset.x, offset.y, offset.z, 0)
+            adjusted[joint] = transform
+        }
+        return adjusted
     }
 
     private static func makePreviewHandPose(
@@ -221,6 +228,9 @@ final class HandSceneController {
             return m
         }
         var result: [HandSkeleton.JointName: simd_float4x4] = [.wrist: mat(wrist)]
+        result[.forearmWrist] = mat(wrist + SIMD3(0, -0.045, 0.005))
+        result[.forearmArm] = mat(wrist + SIMD3(0, -0.16, 0.015))
+
         let thumbBase = wrist + SIMD3(side * 0.03, 0.02, 0.01)
         result[.thumbKnuckle] = mat(thumbBase)
         result[.thumbIntermediateBase] = mat(thumbBase + SIMD3(side * 0.025, 0.02, 0.015))

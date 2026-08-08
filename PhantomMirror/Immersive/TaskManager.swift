@@ -9,43 +9,36 @@ import QuartzCore
 @Observable
 final class TaskManager {
     enum TaskKind: Int, CaseIterable, Identifiable {
-        case openClose = 0
-        case touchOrbs = 1
-        case bimanual = 2
+        case touchOrbs = 0
+        case bimanual = 1
+        case clapHands = 2
 
         var id: Int { rawValue }
 
         var title: String {
             switch self {
-            case .openClose: return "Open / Close"
             case .touchOrbs: return "Touch Orbs"
             case .bimanual: return "Bimanual Match"
+            case .clapHands: return "Clap Hands"
             }
         }
 
         var instruction: String {
             switch self {
-            case .openClose:
-                return "Slowly open and close your intact hand. Watch the phantom hand mirror you."
             case .touchOrbs:
                 return "Reach with the phantom hand and touch each glowing orb."
             case .bimanual:
                 return "Use both hands: intact hand for the cyan cube, phantom hand for the amber cube — bring them together."
+            case .clapHands:
+                return "Bring your intact hand and phantom hand together like a clap."
             }
         }
     }
 
-    private(set) var current: TaskKind = .openClose
+    private(set) var current: TaskKind = .touchOrbs
     private(set) var isComplete = false
     private(set) var progressText: String = ""
     private var phantomIsLeft = false
-
-    // Open/Close
-    private var openCloseCycles = 0
-    private var wasOpen = true
-    private let openThreshold: Float = 0.11
-    private let closeThreshold: Float = 0.06
-    private let cyclesNeeded = 4
 
     // Touch orbs
     let orbRoot = Entity()
@@ -92,18 +85,21 @@ final class TaskManager {
     private var amberCube: ModelEntity?
     private var cubesJoined = false
 
+    // Clap hands
+    private var clapDetected = false
+    private let clapDistanceThreshold: Float = 0.085
+
     func configure(phantomIsLeft: Bool) {
         self.phantomIsLeft = phantomIsLeft
     }
 
     func resetAll() {
-        current = .openClose
+        current = .touchOrbs
         isComplete = false
-        openCloseCycles = 0
-        wasOpen = true
         orbsTouched = 0
         cubesJoined = false
-        progressText = "Cycles: 0 / \(cyclesNeeded)"
+        clapDetected = false
+        progressText = "Orbs: 0 / 3"
         clearOrbs()
         clearCubes()
     }
@@ -112,12 +108,6 @@ final class TaskManager {
         current = kind
         isComplete = false
         switch kind {
-        case .openClose:
-            openCloseCycles = 0
-            wasOpen = true
-            progressText = "Cycles: 0 / \(cyclesNeeded)"
-            clearOrbs()
-            clearCubes()
         case .touchOrbs:
             orbsTouched = 0
             progressText = "Orbs: 0 / 3"
@@ -128,6 +118,11 @@ final class TaskManager {
             progressText = "Bring cubes together"
             clearOrbs()
             spawnCubes()
+        case .clapHands:
+            clapDetected = false
+            progressText = "Bring palms together"
+            clearOrbs()
+            clearCubes()
         }
     }
 
@@ -142,21 +137,6 @@ final class TaskManager {
     }
 
     // MARK: - Updates
-
-    func updateOpenClose(openness: Float?) {
-        guard current == .openClose, let openness else { return }
-        if wasOpen && openness < closeThreshold {
-            wasOpen = false
-        } else if !wasOpen && openness > openThreshold {
-            wasOpen = true
-            openCloseCycles += 1
-            progressText = "Cycles: \(openCloseCycles) / \(cyclesNeeded)"
-            if openCloseCycles >= cyclesNeeded {
-                isComplete = true
-                progressText = "Task complete ✓"
-            }
-        }
-    }
 
     func updateTouchOrbs(phantomWorld: [HandSkeleton.JointName: simd_float4x4]) {
         guard current == .touchOrbs, !phantomWorld.isEmpty else { return }
@@ -266,6 +246,44 @@ final class TaskManager {
             cyan.model?.materials = [SimpleMaterial(color: .systemGreen, isMetallic: false)]
             amber.model?.materials = [SimpleMaterial(color: .systemGreen, isMetallic: false)]
         }
+    }
+
+    func updateClapHands(
+        intactWorld: [HandSkeleton.JointName: simd_float4x4],
+        phantomWorld: [HandSkeleton.JointName: simd_float4x4]
+    ) {
+        guard current == .clapHands,
+              !clapDetected,
+              let intactPalm = palmCenter(from: intactWorld),
+              let phantomPalm = palmCenter(from: phantomWorld) else { return }
+
+        let distance = simd_distance(intactPalm, phantomPalm)
+        progressText = String(format: "Palm distance: %.0f cm", distance * 100)
+        if distance <= clapDistanceThreshold {
+            clapDetected = true
+            isComplete = true
+            progressText = "Task complete ✓"
+        }
+    }
+
+    private func palmCenter(from worldTransforms: [HandSkeleton.JointName: simd_float4x4]) -> SIMD3<Float>? {
+        let palmJoints: [HandSkeleton.JointName] = [
+            .wrist,
+            .indexFingerMetacarpal,
+            .middleFingerMetacarpal,
+            .ringFingerMetacarpal,
+            .littleFingerMetacarpal
+        ]
+
+        var sum = SIMD3<Float>.zero
+        var count: Float = 0
+        for joint in palmJoints {
+            guard let transform = worldTransforms[joint] else { continue }
+            sum += transform.translation
+            count += 1
+        }
+        guard count > 0 else { return nil }
+        return sum / count
     }
 
     // MARK: - Spawning

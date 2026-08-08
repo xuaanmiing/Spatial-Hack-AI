@@ -91,8 +91,8 @@ struct ImmersiveView: View {
     private func startTrainingTasks() {
         tasks.configure(phantomIsLeft: appState.missingSide == .left)
         tasks.resetAll()
-        tasks.start(.openClose)
-        appState.taskInstruction = TaskManager.TaskKind.openClose.instruction
+        tasks.start(.touchOrbs)
+        appState.taskInstruction = TaskManager.TaskKind.touchOrbs.instruction
         appState.currentTaskIndex = 0
     }
 
@@ -200,11 +200,14 @@ struct ImmersiveView: View {
 
         guard appState.phase == .training else { return }
 
-        tasks.updateOpenClose(openness: scene.lastPhantomOpenness)
         tasks.updateTouchOrbs(phantomWorld: scene.lastPhantomWorld)
         tasks.updateBimanual(
             intactTip: scene.lastIntactIndexTip,
             phantomTip: scene.lastPhantomIndexTip
+        )
+        tasks.updateClapHands(
+            intactWorld: scene.lastIntactWorld,
+            phantomWorld: scene.lastPhantomWorld
         )
         appState.taskInstruction = tasks.current.instruction
     }

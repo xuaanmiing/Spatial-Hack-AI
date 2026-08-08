@@ -26,6 +26,7 @@
 		E9AECD959E72412BBE850BB8 /* PhantomMirrorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4EB5C3BBF36473495937FAD /* PhantomMirrorApp.swift */; };
 		F2A2B3C4D5E6478890ABCDEF /* HandArm_Right.usdz in Resources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6478890ABCDEF /* HandArm_Right.usdz */; };
 		F5430A9EEF784AC5AC5148F5 /* CalibrationData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E58945771FB4AEB8BAC593E /* CalibrationData.swift */; };
+		FF3E1B483026FE1A008878FE /* hand.usdc in Resources */ = {isa = PBXBuildFile; fileRef = FF3E1B473026FE1A008878FE /* hand.usdc */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,6 +52,7 @@
 		E7DA53F4DCF34A888638F708 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		EEF04CE05FAB4BBD8238D429 /* TrainingHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingHUD.swift; sourceTree = "<group>"; };
 		F1A2B3C4D5E6478890ABCDEF /* HandArm_Right.usdz */ = {isa = PBXFileReference; lastKnownFileType = file.usdz; path = HandArm_Right.usdz; sourceTree = "<group>"; };
+		FF3E1B473026FE1A008878FE /* hand.usdc */ = {isa = PBXFileReference; lastKnownFileType = file; path = hand.usdc; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,6 +76,7 @@
 				E1B2C3D4E5F6478890ABCDEF /* Resources */,
 				E7DA53F4DCF34A888638F708 /* Info.plist */,
 				3F95D5435A3D46B8B7DABCE1 /* PhantomMirror.entitlements */,
+				FF3E1B473026FE1A008878FE /* hand.usdc */,
 			);
 			path = PhantomMirror;
 			sourceTree = "<group>";
@@ -195,6 +198,7 @@
 			files = (
 				F2A2B3C4D5E6478890ABCDEF /* HandArm_Right.usdz in Resources */,
 				D1B2C3D4E5F6478890ABCDEF /* RightHand_ARKit27.usdz in Resources */,
+				FF3E1B483026FE1A008878FE /* hand.usdc in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

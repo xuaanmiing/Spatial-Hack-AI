@@ -6,8 +6,11 @@ struct TrainingHUD: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            let taskCount = TaskManager.TaskKind.allCases.count
+            let lastTaskIndex = max(0, taskCount - 1)
+
             HStack {
-                Text("Task \(appState.currentTaskIndex + 1)/3")
+                Text("Task \(appState.currentTaskIndex + 1)/\(taskCount)")
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
@@ -41,11 +44,11 @@ struct TrainingHUD: View {
 
                 Spacer()
 
-                Button(tasks.isComplete && appState.currentTaskIndex >= 2 ? "Finish" : "Next task") {
+                Button(tasks.isComplete && appState.currentTaskIndex >= lastTaskIndex ? "Finish" : "Next task") {
                     if tasks.isComplete {
                         appState.session.tasksCompleted += 1
                     }
-                    if appState.currentTaskIndex >= 2 && tasks.isComplete {
+                    if appState.currentTaskIndex >= lastTaskIndex && tasks.isComplete {
                         appState.finishTraining()
                     } else if tasks.advanceIfPossible() {
                         appState.currentTaskIndex = tasks.current.rawValue
@@ -55,7 +58,7 @@ struct TrainingHUD: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!tasks.isComplete && appState.currentTaskIndex < 2)
+                .disabled(!tasks.isComplete)
                 // Allow skip during demo:
                 .contextMenu {
                     Button("Force next (demo skip)") {
@@ -71,7 +74,7 @@ struct TrainingHUD: View {
                     appState.currentTaskIndex = tasks.current.rawValue
                     appState.taskInstruction = tasks.current.instruction
                 } else {
-                    appState.session.tasksCompleted = 3
+                    appState.session.tasksCompleted = taskCount
                     appState.finishTraining()
                 }
             }

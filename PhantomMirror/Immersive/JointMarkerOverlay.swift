@@ -20,9 +20,9 @@ final class JointMarkerOverlay {
     private var markers: [HandSkeleton.JointName: ModelEntity] = [:]
 
     /// Base radius of an unselected marker (meters).
-    private let baseRadius: Float = 0.008
+    private let baseRadius: Float = 0.004
     /// Radius the selected marker grows to at the peak of its pulse.
-    private let selectedRadius: Float = 0.016
+    private let selectedRadius: Float = 0.008
 
     private let idleColor    = UIColor(red: 0.35, green: 0.75, blue: 1.00, alpha: 0.85)
     private let tunedColor   = UIColor(red: 1.00, green: 0.55, blue: 0.15, alpha: 0.95)
