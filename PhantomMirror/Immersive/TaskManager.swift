@@ -34,7 +34,7 @@ final class TaskManager {
             case .bimanual:
                 return "Pinch each cube with thumb + index + middle (intact = cyan, phantom = amber), then bring them together."
             case .clapHands:
-                return "Bring your intact hand and phantom hand together like a clap."
+                return "Clap your intact hand and phantom hand together 5 times."
             case .sliceHorizontal:
                 return "Swipe your phantom hand sideways through the block to cut it horizontally."
             case .sliceVertical:
@@ -113,8 +113,12 @@ final class TaskManager {
     ]
 
     // Clap hands
-    private var clapDetected = false
+    private var clapCount = 0
+    private var clapIsClosed = false
+    private let clapTargetCount = 5
     private let clapDistanceThreshold: Float = 0.085
+    /// Palms must separate past this before the next clap can register.
+    private let clapReopenDistance: Float = 0.14
 
     // Slice blocks
     let sliceRoot = Entity()
@@ -146,6 +150,13 @@ final class TaskManager {
         return SIMD3(right, 1.25 + up, -forward)
     }
 
+    /// Comfortable arm-reach band: centered in front of the user.
+    private enum ReachableSpawn {
+        static let forward: Float = 0.50
+        /// Less below eye level so props stay in view without looking down.
+        static let handHeight: Float = -0.18
+    }
+
     func resetAll() {
         current = .touchOrbs
         isComplete = false
@@ -153,7 +164,8 @@ final class TaskManager {
         cubesJoined = false
         cyanGrabbed = false
         amberGrabbed = false
-        clapDetected = false
+        clapCount = 0
+        clapIsClosed = false
         previousPalmCenter = nil
         previousSampleTime = nil
         celebrationTrigger = 0
@@ -182,8 +194,9 @@ final class TaskManager {
             clearSliceBlock()
             spawnCubes()
         case .clapHands:
-            clapDetected = false
-            progressText = "Bring palms together"
+            clapCount = 0
+            clapIsClosed = false
+            progressText = "Claps: 0 / \(clapTargetCount)"
             clearOrbs()
             clearCubes()
             clearSliceBlock()
@@ -423,16 +436,34 @@ final class TaskManager {
         phantomWorld: [HandSkeleton.JointName: simd_float4x4]
     ) {
         guard current == .clapHands,
-              !clapDetected,
+              !isComplete,
               let intactPalm = palmCenter(from: intactWorld),
               let phantomPalm = palmCenter(from: phantomWorld) else { return }
 
         let distance = simd_distance(intactPalm, phantomPalm)
-        progressText = String(format: "Palm distance: %.0f cm", distance * 100)
-        if distance <= clapDistanceThreshold {
-            clapDetected = true
+
+        if clapIsClosed {
+            if distance >= clapReopenDistance {
+                clapIsClosed = false
+            }
+        } else if distance <= clapDistanceThreshold {
+            clapIsClosed = true
+            clapCount += 1
             audio?.play(.clap)
-            markComplete()
+            progressText = "Claps: \(clapCount) / \(clapTargetCount)"
+            if clapCount >= clapTargetCount {
+                markComplete()
+                return
+            }
+        }
+
+        if !isComplete {
+            progressText = String(
+                format: "Claps: %d / %d  ·  %.0f cm",
+                clapCount,
+                clapTargetCount,
+                distance * 100
+            )
         }
     }
 
@@ -512,11 +543,12 @@ final class TaskManager {
 
     private func spawnOrbs() {
         clearOrbs()
+        // Bias toward the phantom-hand side so the virtual arm can reach them comfortably.
         let side: Float = phantomIsLeft ? -1 : 1
         let positions: [SIMD3<Float>] = [
-            place(right: side * 0.15, up: -0.35, forward: 0.45),
-            place(right: side * 0.28, up: -0.20, forward: 0.35),
-            place(right: side * 0.08, up: -0.10, forward: 0.55)
+            place(right: side * 0.16, up: ReachableSpawn.handHeight, forward: ReachableSpawn.forward),
+            place(right: side * 0.24, up: ReachableSpawn.handHeight + 0.06, forward: ReachableSpawn.forward + 0.03),
+            place(right: side * 0.12, up: ReachableSpawn.handHeight - 0.05, forward: ReachableSpawn.forward - 0.02)
         ]
         for (i, pos) in positions.enumerated() {
             let mat = SimpleMaterial(color: .systemOrange, roughness: 0.2, isMetallic: false)
@@ -541,21 +573,22 @@ final class TaskManager {
 
     private func spawnCubes() {
         clearCubes()
-        let phantomX: Float = phantomIsLeft ? -0.18 : 0.18
+        // Keep both cubes in easy reach, split left/right of center-front.
+        let phantomX: Float = phantomIsLeft ? -0.12 : 0.12
         let intactX = -phantomX
         let cubeSize = cubeHalfSize * 2
         let cyan = ModelEntity(
             mesh: .generateBox(size: cubeSize, cornerRadius: 0.006),
             materials: [SimpleMaterial(color: .cyan, isMetallic: false)]
         )
-        cyan.position = place(right: intactX, up: -0.30, forward: 0.75)
+        cyan.position = place(right: intactX, up: ReachableSpawn.handHeight, forward: ReachableSpawn.forward)
         cyan.name = "cyanCube"
 
         let amber = ModelEntity(
             mesh: .generateBox(size: cubeSize, cornerRadius: 0.006),
             materials: [SimpleMaterial(color: .systemOrange, isMetallic: false)]
         )
-        amber.position = place(right: phantomX, up: -0.30, forward: 0.75)
+        amber.position = place(right: phantomX, up: ReachableSpawn.handHeight, forward: ReachableSpawn.forward)
         amber.name = "amberCube"
 
         cubeRoot.addChild(cyan)
@@ -581,8 +614,9 @@ final class TaskManager {
 
     private func spawnSliceBlock() {
         clearSliceBlock()
+        // Bias toward the phantom-hand side at arm reach.
         let side: Float = phantomIsLeft ? -1 : 1
-        sliceBlockCenter = place(right: side * 0.2, up: -0.30, forward: 0.75)
+        sliceBlockCenter = place(right: side * 0.18, up: ReachableSpawn.handHeight, forward: ReachableSpawn.forward)
 
         let block = ModelEntity(
             mesh: .generateBox(size: sliceBlockHalfSize * 2, cornerRadius: 0.004),
