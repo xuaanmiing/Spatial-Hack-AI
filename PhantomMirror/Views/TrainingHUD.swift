@@ -35,7 +35,7 @@ struct TrainingHUD: View {
             HStack {
                 Button("End session") {
                     appState.session.tasksCompleted = appState.currentTaskIndex + (tasks.isComplete ? 1 : 0)
-                    appState.finishTraining()
+                    appState.finishTraining(with: tasks)
                 }
                 .buttonStyle(.bordered)
 
@@ -46,12 +46,12 @@ struct TrainingHUD: View {
                         appState.session.tasksCompleted += 1
                     }
                     if appState.currentTaskIndex >= 2 && tasks.isComplete {
-                        appState.finishTraining()
+                        appState.finishTraining(with: tasks)
                     } else if tasks.advanceIfPossible() {
                         appState.currentTaskIndex = tasks.current.rawValue
                         appState.taskInstruction = tasks.current.instruction
                     } else {
-                        appState.finishTraining()
+                        appState.finishTraining(with: tasks)
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -72,7 +72,7 @@ struct TrainingHUD: View {
                     appState.taskInstruction = tasks.current.instruction
                 } else {
                     appState.session.tasksCompleted = 3
-                    appState.finishTraining()
+                    appState.finishTraining(with: tasks)
                 }
             }
             .font(.caption)

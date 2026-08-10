@@ -60,6 +60,10 @@ final class AppState {
     var showVirtualIntactHand = false
     var hideRealUpperLimbs = true
 
+    /// When true, the report view presents the multi-step clinical intake
+    /// sheet before showing the finalized report.
+    var showingPostSessionIntake = false
+
     /// Calibration UI: whole-hand pose vs per-joint debug offsets.
     var calibrationTab: CalibrationTab = .pose
     /// Currently selected joint in the joint-debug list.
@@ -121,14 +125,38 @@ final class AppState {
         currentTaskIndex = 0
     }
 
-    func finishTraining() {
+    /// Called from `TrainingHUD` when the user ends the session. Closes the
+    /// immersive space, harvests objective motor metrics from the supplied
+    /// `TaskManager`, and transitions to the report phase — the report view
+    /// itself presents the clinical intake sheet on first appearance.
+    func finishTraining(with tasks: TaskManager? = nil) {
         session.endedAt = Date()
+        if let tasks {
+            harvestMotorMetrics(from: tasks)
+        }
         immersiveOpen = false
         phase = .report
+        showingPostSessionIntake = true
+    }
+
+    /// Called from `PostSessionIntakeView` once the user finishes (or skips)
+    /// the questionnaire. Persists the session to `SessionHistory` so it
+    /// contributes to the trend chart on future report views.
+    func submitPostSessionIntake() {
+        showingPostSessionIntake = false
+        SessionHistory.shared.append(session)
+    }
+
+    /// Read passive motor-sampling accumulators out of the `TaskManager`.
+    private func harvestMotorMetrics(from tasks: TaskManager) {
+        session.reachVolumeCm3 = tasks.reachVolumeCm3()
+        session.motionSmoothness = tasks.motionSmoothness()
+        session.perTaskDurationsSeconds = tasks.perTaskDurations()
     }
 
     func returnToOnboarding() {
         immersiveOpen = false
+        showingPostSessionIntake = false
         phase = .onboarding
         resetSession()
     }

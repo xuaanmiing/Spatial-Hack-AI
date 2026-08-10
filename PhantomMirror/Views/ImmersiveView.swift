@@ -204,6 +204,16 @@ struct ImmersiveView: View {
             intactTip: scene.lastIntactIndexTip,
             phantomTip: scene.lastPhantomIndexTip
         )
+
+        // Passive sampling for clinical motor-engagement metrics.
+        // Uses phantom-wrist position (more stable than fingertip for reach)
+        // when available, else falls back to phantom index tip.
+        let palmPos = scene.lastPhantomWorld[.wrist]?.translation
+            ?? scene.lastPhantomIndexTip
+        if let palmPos {
+            tasks.recordPhantomPalmSample(palmPos, at: CACurrentMediaTime())
+        }
+
         appState.taskInstruction = tasks.current.instruction
     }
 }

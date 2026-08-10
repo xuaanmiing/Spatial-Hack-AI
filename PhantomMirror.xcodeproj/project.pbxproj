@@ -13,6 +13,9 @@
 		52C616D2A2A1480B83F16283 /* MirrorTransform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6F8CFE04E441D598572C43 /* MirrorTransform.swift */; };
 		5633D2AC90AE465AA4E0A101 /* TrainingHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEF04CE05FAB4BBD8238D429 /* TrainingHUD.swift */; };
 		58792150E0284E5A8777AC31 /* SessionReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7B4571E18CA41E69A97F514 /* SessionReport.swift */; };
+		B11A2B3C4D5E6F7089ABCD02 /* ClinicalScales.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11A2B3C4D5E6F7089ABCD01 /* ClinicalScales.swift */; };
+		B21A2B3C4D5E6F7089ABCD02 /* SessionHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21A2B3C4D5E6F7089ABCD01 /* SessionHistory.swift */; };
+		B31A2B3C4D5E6F7089ABCD02 /* PostSessionIntakeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31A2B3C4D5E6F7089ABCD01 /* PostSessionIntakeView.swift */; };
 		7B8A627A65624B8CAD28BFA5 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A70F368DEDC49D682BDD44B /* OnboardingView.swift */; };
 		8E563726383A4C14BC72B4A3 /* VirtualHandVisualizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF3EAAFD83E4237AA22EA9D /* VirtualHandVisualizer.swift */; };
 		9F1A2B3C4D5E6F7089ABCDEF /* SkinnedProceduralHand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F1A2B3C4D5E6F7089ABCDEE /* SkinnedProceduralHand.swift */; };
@@ -49,6 +52,9 @@
 		A4EB5C3BBF36473495937FAD /* PhantomMirrorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhantomMirrorApp.swift; sourceTree = "<group>"; };
 		B013E1AABA814BC5AADF6227 /* ImmersiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmersiveView.swift; sourceTree = "<group>"; };
 		B7B4571E18CA41E69A97F514 /* SessionReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReport.swift; sourceTree = "<group>"; };
+		B11A2B3C4D5E6F7089ABCD01 /* ClinicalScales.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicalScales.swift; sourceTree = "<group>"; };
+		B21A2B3C4D5E6F7089ABCD01 /* SessionHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionHistory.swift; sourceTree = "<group>"; };
+		B31A2B3C4D5E6F7089ABCD01 /* PostSessionIntakeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostSessionIntakeView.swift; sourceTree = "<group>"; };
 		BB76F33BE6184395B6EEFA4D /* ReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportView.swift; sourceTree = "<group>"; };
 
 		C4D5E6F708194A2BB3C4D5E7 /* JointDebugPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JointDebugPanel.swift; sourceTree = "<group>"; };
@@ -109,6 +115,7 @@
 				C4D5E6F708194A2BB3C4D5E7 /* JointDebugPanel.swift */,
 				EEF04CE05FAB4BBD8238D429 /* TrainingHUD.swift */,
 				BB76F33BE6184395B6EEFA4D /* ReportView.swift */,
+				B31A2B3C4D5E6F7089ABCD01 /* PostSessionIntakeView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -143,6 +150,8 @@
 				A3504900B7D84EF1ACDD0355 /* AppState.swift */,
 				2E58945771FB4AEB8BAC593E /* CalibrationData.swift */,
 				B7B4571E18CA41E69A97F514 /* SessionReport.swift */,
+				B11A2B3C4D5E6F7089ABCD01 /* ClinicalScales.swift */,
+				B21A2B3C4D5E6F7089ABCD01 /* SessionHistory.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -217,6 +226,8 @@
 				B80F806F55E941C4A8452822 /* AppState.swift in Sources */,
 				F5430A9EEF784AC5AC5148F5 /* CalibrationData.swift in Sources */,
 				58792150E0284E5A8777AC31 /* SessionReport.swift in Sources */,
+				B11A2B3C4D5E6F7089ABCD02 /* ClinicalScales.swift in Sources */,
+				B21A2B3C4D5E6F7089ABCD02 /* SessionHistory.swift in Sources */,
 				52C616D2A2A1480B83F16283 /* MirrorTransform.swift in Sources */,
 				CAD6833123D14A168F926422 /* HandTrackingManager.swift in Sources */,
 				8E563726383A4C14BC72B4A3 /* VirtualHandVisualizer.swift in Sources */,
@@ -230,6 +241,7 @@
 				C4D5E6F708194A2BB3C4D5E6 /* JointDebugPanel.swift in Sources */,
 				5633D2AC90AE465AA4E0A101 /* TrainingHUD.swift in Sources */,
 				991AEC39DD0347489D71750A /* ReportView.swift in Sources */,
+				B31A2B3C4D5E6F7089ABCD02 /* PostSessionIntakeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
