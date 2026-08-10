@@ -197,9 +197,6 @@ final class AppState {
     private func requestImmersiveOpen() {
         if !immersiveOpen {
             immersiveSessionID += 1
-            var next = calibration
-            next.skinAlignmentConfirmed = false
-            calibration = next
         }
         immersiveOpen = true
     }

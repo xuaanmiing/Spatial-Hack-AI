@@ -33,6 +33,7 @@
 		F5430A9EEF784AC5AC5148F5 /* CalibrationData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E58945771FB4AEB8BAC593E /* CalibrationData.swift */; };
 		6B22B2B2C3C3D4D4E5E5F501 /* FirstPersonHand_Left.usdc in Resources */ = {isa = PBXBuildFile; fileRef = 6B22B2B2C3C3D4D4E5E5F511 /* FirstPersonHand_Left.usdc */; };
 		6B22B2B2C3C3D4D4E5E5F502 /* FirstPersonHand_Right.usdc in Resources */ = {isa = PBXBuildFile; fileRef = 6B22B2B2C3C3D4D4E5E5F512 /* FirstPersonHand_Right.usdc */; };
+		A11C0A11B22C33D44E55F601 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A11C0A11B22C33D44E55F611 /* Assets.xcassets */; };
 		5A11A1A1B2B2C3C3D4D4E501 /* SkinRigAlignmentController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11A1A1B2B2C3C3D4D4E511 /* SkinRigAlignmentController.swift */; };
 		5A11A1A1B2B2C3C3D4D4E502 /* SkinRigAlignmentPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11A1A1B2B2C3C3D4D4E512 /* SkinRigAlignmentPanel.swift */; };
 /* End PBXBuildFile section */
@@ -69,6 +70,7 @@
 		6B22B2B2C3C3D4D4E5E5F512 /* FirstPersonHand_Right.usdc */ = {isa = PBXFileReference; lastKnownFileType = file; path = FirstPersonHand_Right.usdc; sourceTree = "<group>"; };
 		5A11A1A1B2B2C3C3D4D4E511 /* SkinRigAlignmentController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkinRigAlignmentController.swift; sourceTree = "<group>"; };
 		5A11A1A1B2B2C3C3D4D4E512 /* SkinRigAlignmentPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkinRigAlignmentPanel.swift; sourceTree = "<group>"; };
+		A11C0A11B22C33D44E55F611 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -91,6 +93,7 @@
 				661C40482A544E958ED06AD1 /* Views */,
 				E1B2C3D4E5F6478890ABCDEF /* Resources */,
 				E7DA53F4DCF34A888638F708 /* Info.plist */,
+				A11C0A11B22C33D44E55F611 /* Assets.xcassets */,
 				3F95D5435A3D46B8B7DABCE1 /* PhantomMirror.entitlements */,
 				6B22B2B2C3C3D4D4E5E5F511 /* FirstPersonHand_Left.usdc */,
 				6B22B2B2C3C3D4D4E5E5F512 /* FirstPersonHand_Right.usdc */,
@@ -224,6 +227,7 @@
 				D1B2C3D4E5F6478890ABCDEF /* RightHand_ARKit27.usdz in Resources */,
 				6B22B2B2C3C3D4D4E5E5F501 /* FirstPersonHand_Left.usdc in Resources */,
 				6B22B2B2C3C3D4D4E5E5F502 /* FirstPersonHand_Right.usdc in Resources */,
+				A11C0A11B22C33D44E55F601 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -267,6 +271,7 @@
 		2766FD2CE35F498ABA2B8329 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = PhantomMirror/PhantomMirror.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -386,6 +391,7 @@
 		AE1D89149B25447EBF0EA454 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = PhantomMirror/PhantomMirror.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;

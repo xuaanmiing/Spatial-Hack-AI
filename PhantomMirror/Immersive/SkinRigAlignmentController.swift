@@ -150,6 +150,14 @@ final class SkinRigAlignmentController {
         modelAnchor.setTransformMatrix(modelReferenceWorld, relativeTo: nil)
         applyAlignment(calibration)
 
+        if isBound, bindingModelFromWrist == nil, isLiveTracked {
+            // A reopened ImmersiveSpace can have a new world origin. Keep the
+            // calibrated joint-axis bindings, but rebase the wrist attachment
+            // onto the first live wrist in this coordinate space.
+            bindingModelFromWrist = simd_inverse(wrist)
+                * modelAnchor.transformMatrix(relativeTo: nil)
+        }
+
         if autoBind, isLiveTracked, !isBound {
             _ = confirmAlignment(referenceWorld: worldTransforms, isLiveTracked: true)
         }
@@ -242,24 +250,32 @@ final class SkinRigAlignmentController {
         fixedCoordinateAxes.isEnabled = false
     }
 
-    func resetForNewTrackingSession() {
+    func resetForNewTrackingSession(preservingBinding: Bool = true) {
+        let canPreserveBinding = preservingBinding
+            && isBound
+            && !skinFromARKitByModel.isEmpty
+            && !forearmRootFromARKitByModel.isEmpty
         fixedAxesPlaced = false
         fixedReferenceWorld = matrix_identity_float4x4
         unboundModelReferenceWorld = matrix_identity_float4x4
         bindingModelFromWrist = nil
-        referenceLocalRotations.removeAll()
-        lastTrackedLocalRotations.removeAll()
         observedLiveLocalRotations.removeAll()
         lastTrackedWorldTransforms.removeAll()
-        skinFromARKitByModel.removeAll()
-        forearmRootFromARKitByModel.removeAll()
         previousHandControlRotation = nil
-        isBound = false
+        if !canPreserveBinding {
+            referenceLocalRotations.removeAll()
+            lastTrackedLocalRotations.removeAll()
+            skinFromARKitByModel.removeAll()
+            forearmRootFromARKitByModel.removeAll()
+        }
+        isBound = canPreserveBinding
         keepFrozenPoseWhenUnbound = false
         restoreRestPose()
         setVisible(false)
         if isLoaded {
-            statusText = "Ready for a new tracking session."
+            statusText = canPreserveBinding
+                ? "Saved skin binding ready; waiting to reattach at the live wrist."
+                : "Ready for a new tracking session."
         }
     }
 
