@@ -3,6 +3,14 @@ import simd
 import ARKit
 
 struct CalibrationData: Codable, Equatable {
+    private static let defaultSkinCenter = SIMD3<Float>(
+        0.91588604, -1.3858759, -0.3796959
+    )
+    private static let defaultSkinRotation = SIMD4<Float>(
+        0.41597965, -0.71764684, -0.54932106, 0.10094717
+    )
+    private static let defaultSkinScale: Float = 1.0
+
     /// Head-yaw-relative offset applied after mirroring, in meters.
     var phantomOffset: SIMD3<Float> = .zero
 
@@ -15,6 +23,21 @@ struct CalibrationData: Codable, Equatable {
     /// Per-joint local translation offsets (meters), keyed by `String(describing: HandSkeleton.JointName)`.
     /// Applied on top of the USDZ rest bone lengths after rotations are driven.
     var jointOffsets: [String: SIMD3<Float>] = [:]
+
+    /// Global transform used to align the selected handed skin with the procedural ARKit skeleton.
+    /// User adjustment relative to the recorded default alignment.
+    var skinOffset: SIMD3<Float> = .zero
+    /// Current model center expressed in the fixed alignment frame. This is
+    /// separate from the slider values because fixed-origin rotation also
+    /// rotates the model center around that origin.
+    var skinModelCenterOffset: SIMD3<Float>? = Self.defaultSkinCenter
+    var skinRotationDegrees: SIMD3<Float> = .zero
+    /// Accumulated orientation in the fixed alignment coordinate frame.
+    /// Optional so calibration data saved by older builds still decodes.
+    var skinRotationQuaternionVector: SIMD4<Float>? = Self.defaultSkinRotation
+    var skinScale: Float = Self.defaultSkinScale
+    var showSkinRig = true
+    var skinAlignmentConfirmed = false
 
     static let offsetStep: Float = 0.1
     static let scaleStep: Float = 0.05
@@ -51,6 +74,64 @@ struct CalibrationData: Codable, Equatable {
 
     mutating func resetJointOffsets() {
         jointOffsets.removeAll()
+    }
+
+    mutating func resetSkinAlignment() {
+        skinOffset = .zero
+        skinModelCenterOffset = Self.defaultSkinCenter
+        skinRotationDegrees = .zero
+        skinRotationQuaternionVector = Self.defaultSkinRotation
+        skinScale = Self.defaultSkinScale
+        showSkinRig = true
+        skinAlignmentConfirmed = false
+    }
+
+    var skinRotationQuaternion: simd_quatf {
+        if let vector = skinRotationQuaternionVector,
+           simd_length_squared(vector) > 1e-12 {
+            return simd_normalize(simd_quatf(vector: vector))
+        }
+
+        let radians = skinRotationDegrees * (.pi / 180)
+        let qx = simd_quatf(angle: radians.x, axis: SIMD3<Float>(1, 0, 0))
+        let qy = simd_quatf(angle: radians.y, axis: SIMD3<Float>(0, 1, 0))
+        let qz = simd_quatf(angle: radians.z, axis: SIMD3<Float>(0, 0, 1))
+        return simd_normalize(qz * qy * qx)
+    }
+
+    var resolvedSkinModelCenterOffset: SIMD3<Float> {
+        if let skinModelCenterOffset {
+            return skinModelCenterOffset
+        }
+        // Migrate the previous hierarchy, where translation lived below the
+        // fixed-frame rotation pivot.
+        return skinRotationQuaternion.act(skinOffset)
+    }
+
+    mutating func setSkinTranslation(axis: Int, value: Float) {
+        let delta = value - skinOffset[axis]
+        var center = resolvedSkinModelCenterOffset
+        center[axis] += delta
+        skinModelCenterOffset = center
+        skinOffset[axis] = value
+        skinAlignmentConfirmed = false
+    }
+
+    mutating func setSkinRotation(axis: Int, degrees: Float) {
+        let delta = (degrees - skinRotationDegrees[axis]) * (.pi / 180)
+        let fixedAxis: SIMD3<Float>
+        switch axis {
+        case 0: fixedAxis = SIMD3(1, 0, 0)
+        case 1: fixedAxis = SIMD3(0, 1, 0)
+        default: fixedAxis = SIMD3(0, 0, 1)
+        }
+
+        let fixedFrameDelta = simd_quatf(angle: delta, axis: fixedAxis)
+        skinModelCenterOffset = fixedFrameDelta.act(resolvedSkinModelCenterOffset)
+        let updated = simd_normalize(fixedFrameDelta * skinRotationQuaternion)
+        skinRotationQuaternionVector = updated.vector
+        skinRotationDegrees[axis] = degrees
+        skinAlignmentConfirmed = false
     }
 
     /// Map used by the skinned hand driver.

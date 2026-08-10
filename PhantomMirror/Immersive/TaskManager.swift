@@ -60,7 +60,7 @@ final class TaskManager {
     private var orbBasePositions: [String: SIMD3<Float>] = [:]
     private var orbTouchedAt: [String: CFTimeInterval] = [:]
     private var orbsTouched = 0
-    private let orbRadius: Float = 0.03
+    private let orbRadius: Float = 0.04
     private let handVolumeRadius: Float = 0.035
     private let orbVibrationDuration: CFTimeInterval = 0.28
 
@@ -147,13 +147,16 @@ final class TaskManager {
 
     func configure(phantomIsLeft: Bool, headPose: simd_float4x4? = nil) {
         self.phantomIsLeft = phantomIsLeft
-        if let headPose {
-            referenceHeadPose = headPose
-        }
+        // Never reuse world coordinates from a previous ImmersiveSpace session.
+        referenceHeadPose = headPose
     }
 
     func updateReferenceHeadPose(_ headPose: simd_float4x4) {
+        let needsInitialPlacement = referenceHeadPose == nil
         referenceHeadPose = headPose
+        if needsInitialPlacement {
+            repositionActiveOrbs()
+        }
     }
 
     private func place(right: Float, up: Float, forward: Float) -> SIMD3<Float> {
@@ -628,25 +631,35 @@ final class TaskManager {
 
     private func spawnOrbs() {
         clearOrbs()
-        // Spread across phantom-side reach space (near / high / far) so they don't overlap.
-        let side: Float = phantomIsLeft ? -1 : 1
-        let h = ReachableSpawn.handHeight
-        let positions: [SIMD3<Float>] = [
-            place(right: side * 0.10, up: h - 0.08, forward: 0.40),
-            place(right: side * 0.30, up: h + 0.12, forward: 0.50),
-            place(right: side * 0.18, up: h + 0.02, forward: 0.65)
-        ]
-        for (i, pos) in positions.enumerated() {
-            let mat = SimpleMaterial(color: .systemOrange, roughness: 0.2, isMetallic: false)
+        for (i, pos) in orbPositions().enumerated() {
             let orb = ModelEntity(
-                mesh: .generateSphere(radius: 0.03),
-                materials: [mat]
+                mesh: .generateSphere(radius: orbRadius),
+                materials: [UnlitMaterial(color: .systemOrange)]
             )
             orb.name = "orb-\(i)"
             orb.position = pos
             orbRoot.addChild(orb)
             orbs.append(orb)
             orbBasePositions[orb.name] = pos
+        }
+    }
+
+    private func orbPositions() -> [SIMD3<Float>] {
+        // Spread across phantom-side reach space (near / high / far) so they don't overlap.
+        let side: Float = phantomIsLeft ? -1 : 1
+        let h = ReachableSpawn.handHeight
+        return [
+            place(right: side * 0.10, up: h - 0.08, forward: 0.40),
+            place(right: side * 0.30, up: h + 0.12, forward: 0.50),
+            place(right: side * 0.18, up: h + 0.02, forward: 0.65)
+        ]
+    }
+
+    private func repositionActiveOrbs() {
+        guard current == .touchOrbs, !orbs.isEmpty else { return }
+        for (orb, position) in zip(orbs, orbPositions()) where orbTouchedAt[orb.name] == nil {
+            orb.position = position
+            orbBasePositions[orb.name] = position
         }
     }
 

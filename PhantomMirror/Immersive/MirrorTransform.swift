@@ -39,6 +39,33 @@ enum MirrorTransform {
         return planeReflection * transform * linearReflection
     }
 
+    /// Rigid yaw-and-translation delta between two head poses. Applying this
+    /// same matrix to every mirrored joint lets the phantom follow the head
+    /// without changing any joint-to-joint relationship.
+    static func rigidHorizontalHeadDelta(
+        from referencePose: simd_float4x4,
+        to currentPose: simd_float4x4
+    ) -> simd_float4x4 {
+        horizontalHeadFrame(currentPose) * simd_inverse(horizontalHeadFrame(referencePose))
+    }
+
+    private static func horizontalHeadFrame(_ pose: simd_float4x4) -> simd_float4x4 {
+        var right = SIMD3<Float>(pose.columns.0.x, 0, pose.columns.0.z)
+        if simd_length_squared(right) < 0.000001 {
+            right = SIMD3(1, 0, 0)
+        } else {
+            right = simd_normalize(right)
+        }
+        let up = SIMD3<Float>(0, 1, 0)
+        let back = simd_normalize(simd_cross(right, up))
+        return simd_float4x4(columns: (
+            SIMD4(right, 0),
+            SIMD4(up, 0),
+            SIMD4(back, 0),
+            SIMD4(pose.translation, 1)
+        ))
+    }
+
     /// Mirror a parent-relative joint transform for the opposite hand.
     /// Used when copying left-hand `parentFromJointTransform` onto a right-hand skeleton.
     static func mirrorLocalJoint(_ parentFromJoint: simd_float4x4) -> simd_float4x4 {

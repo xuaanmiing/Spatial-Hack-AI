@@ -24,6 +24,12 @@ struct ImmersiveView: View {
                     bricks.handleSpatialTap(on: value.entity)
                 }
         )
+        // Only the brick playground needs taps inside RealityView. Keeping the
+        // immersive layer out of hit testing elsewhere leaves window controls responsive.
+        .allowsHitTesting(
+            appState.phase == .playground
+                || (appState.phase == .calibration && appState.calibrationTab == .skin)
+        )
         // `.visible` keeps passthrough hands above virtual props.
         // `.hidden` draws all virtual content over the real hands.
         .upperLimbVisibility(appState.hideRealUpperLimbs ? .hidden : .visible)
@@ -37,6 +43,20 @@ struct ImmersiveView: View {
             await presentFallbackPhantomWhileWaiting()
         }
         .onAppear {
+            scene.skinRig.onManualAlignmentBegan = {
+                var next = appState.calibration
+                next.skinAlignmentConfirmed = false
+                appState.calibration = next
+            }
+            scene.skinRig.onManualAlignmentCommitted = { center, rotation in
+                var next = appState.calibration
+                next.skinModelCenterOffset = center
+                next.skinRotationQuaternionVector = rotation.vector
+                next.skinOffset = .zero
+                next.skinRotationDegrees = .zero
+                next.skinAlignmentConfirmed = false
+                appState.calibration = next
+            }
             handTracker.intactChirality = appState.missingSide.intactIsLeft ? .left : .right
             presentFallbackPhantom()
             if appState.phase == .training {
@@ -63,10 +83,20 @@ struct ImmersiveView: View {
         }
         .onChange(of: appState.missingSide) { _, _ in
             handTracker.intactChirality = appState.missingSide.intactIsLeft ? .left : .right
+            if appState.calibration.skinAlignmentConfirmed {
+                var next = appState.calibration
+                next.skinAlignmentConfirmed = false
+                appState.calibration = next
+                scene.skinRig.clearConfirmation()
+            }
             refreshPreviewIfNeeded()
         }
         .onChange(of: appState.calibration) { _, _ in
             refreshPreviewIfNeeded()
+        }
+        .onChange(of: appState.calibrationTab) { _, _ in
+            updateSkinRigForCurrentPhase()
+            updateJointMarkersForCurrentPhase()
         }
         .onChange(of: appState.showVirtualIntactHand) { _, _ in
             refreshPreviewIfNeeded()
@@ -78,12 +108,20 @@ struct ImmersiveView: View {
         }
         .onChange(of: appState.phase) { _, _ in
             updateJointMarkersForCurrentPhase()
+            updateSkinRigForCurrentPhase()
         }
         .onDisappear {
+            scene.skinRig.onManualAlignmentBegan = nil
+            scene.skinRig.onManualAlignmentCommitted = nil
             tasks.clearSceneProps()
             bricks.deactivate()
             handTracker.stop()
             scene.detachFromImmersiveSpace(clearing: tasks, bricks: bricks)
+            // The system can dismiss an ImmersiveSpace independently of our window UI.
+            // Keep AppState honest so a later false -> true change opens it again.
+            if appState.immersiveOpen {
+                appState.immersiveOpen = false
+            }
         }
     }
 
@@ -94,6 +132,7 @@ struct ImmersiveView: View {
             presentFallbackPhantom()
         }
         updateJointMarkersForCurrentPhase()
+        updateSkinRigForCurrentPhase()
     }
 
     private func presentFallbackPhantom() {
@@ -105,6 +144,26 @@ struct ImmersiveView: View {
             headPose: handTracker.currentHeadPose() ?? scene.lastHeadPose
         )
         updateJointMarkersForCurrentPhase()
+        updateSkinRigForCurrentPhase()
+    }
+
+    private func updateSkinRigForCurrentPhase() {
+        scene.updateSkinRig(
+            calibration: appState.calibration,
+            visible: shouldShowSkin,
+            phantomIsLeft: appState.missingSide == .left,
+            isLiveTracked: scene.isShowingTrackedHand,
+            showDebugSkeleton: appState.phase == .calibration,
+            autoBind: appState.phase != .calibration,
+            manualManipulationEnabled: appState.phase == .calibration
+                && appState.calibrationTab == .skin
+        )
+    }
+
+    private var shouldShowSkin: Bool {
+        appState.phase == .calibration
+            || appState.phase == .training
+            || appState.phase == .playground
     }
 
     private func presentFallbackPhantomWhileWaiting() async {
@@ -128,7 +187,7 @@ struct ImmersiveView: View {
     /// Show / hide the debug joint spheres based on the current app phase, using
     /// the last known phantom-hand world transforms.
     private func updateJointMarkersForCurrentPhase() {
-        guard appState.phase == .calibration || appState.phase == .training else {
+        guard appState.phase == .calibration else {
             scene.jointMarkers.setVisible(false)
             return
         }
@@ -265,10 +324,22 @@ struct ImmersiveView: View {
             intactIsLeft: intactIsLeft,
             showIntact: appState.showVirtualIntactHand
         )
+        scene.updateSkinRig(
+            calibration: appState.calibration,
+            visible: appState.phase == .calibration
+                || appState.phase == .training
+                || appState.phase == .playground,
+            phantomIsLeft: appState.missingSide == .left,
+            isLiveTracked: true,
+            showDebugSkeleton: appState.phase == .calibration,
+            autoBind: appState.phase != .calibration,
+            manualManipulationEnabled: appState.phase == .calibration
+                && appState.calibrationTab == .skin
+        )
 
         // The calibrated marker positions are the visual source of truth; keep them
         // visible during both calibration and training.
-        if appState.phase == .calibration || appState.phase == .training {
+        if appState.phase == .calibration {
             scene.jointMarkers.setVisible(true)
             let tuned: Set<HandSkeleton.JointName> = Set(
                 CalibrationData.adjustableJoints.filter {
@@ -287,7 +358,7 @@ struct ImmersiveView: View {
 
         let mode = "calibrated skeleton"
         appState.trackingStatus =
-            "Tracking \(intactIsLeft ? "left→right" : "right→left") · \(mode) · joints \(scene.jointCountLastFrame)"
+            "Tracking \(intactIsLeft ? "left→right" : "right→left") · \(mode) · joints \(scene.jointCountLastFrame) · stabilized \(scene.inferredJointCountLastFrame)"
 
         if appState.phase == .playground {
             bricks.updateBrickInteraction(phantomWorld: scene.lastPhantomWorld)

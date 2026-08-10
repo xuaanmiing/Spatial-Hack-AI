@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CalibrationPanel: View {
     @Environment(AppState.self) private var appState
+    @Environment(HandSceneController.self) private var scene
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -43,6 +44,9 @@ struct CalibrationPanel: View {
                             perBoneWristHint
                         }
                         .padding(20)
+                    case .skin:
+                        SkinRigAlignmentPanel()
+                            .padding(20)
                     case .joints:
                         JointDebugPanel()
                             .padding(20)
@@ -61,12 +65,23 @@ struct CalibrationPanel: View {
 
             HStack(spacing: 16) {
                 Button(role: .destructive) {
-                    if appState.calibrationTab == .joints {
+                    switch appState.calibrationTab {
+                    case .joints:
                         appState.resetAllJointOffsets()
-                    } else {
+                    case .skin:
+                        appState.resetSkinAlignment()
+                        scene.skinRig.clearConfirmation(keepingCurrentPose: false)
+                    case .pose:
                         let joints = appState.calibration.jointOffsets
                         var next = CalibrationData()
                         next.jointOffsets = joints
+                        next.skinOffset = appState.calibration.skinOffset
+                        next.skinModelCenterOffset = appState.calibration.skinModelCenterOffset
+                        next.skinRotationDegrees = appState.calibration.skinRotationDegrees
+                        next.skinRotationQuaternionVector = appState.calibration.skinRotationQuaternionVector
+                        next.skinScale = appState.calibration.skinScale
+                        next.showSkinRig = appState.calibration.showSkinRig
+                        next.skinAlignmentConfirmed = appState.calibration.skinAlignmentConfirmed
                         appState.calibration = next
                     }
                 } label: {

@@ -18,6 +18,7 @@ final class JointMarkerOverlay {
     let root = Entity()
 
     private var markers: [HandSkeleton.JointName: ModelEntity] = [:]
+    private var lastWorldTransforms: [HandSkeleton.JointName: simd_float4x4] = [:]
 
     /// Base radius of an unselected marker (meters).
     private let baseRadius: Float = 0.004
@@ -30,7 +31,7 @@ final class JointMarkerOverlay {
 
     private var isVisibleFlag = true
 
-    init() {
+    init(sortGroup: ModelSortGroup = ModelSortGroup(depthPass: .postPass)) {
         root.name = "jointMarkers"
         for joint in CalibrationData.adjustableJoints {
             let sphere = ModelEntity(
@@ -39,6 +40,7 @@ final class JointMarkerOverlay {
             )
             sphere.name = "marker-\(CalibrationData.jointKey(joint))"
             sphere.isEnabled = false
+            sphere.components.set(ModelSortGroupComponent(group: sortGroup, order: 100))
             root.addChild(sphere)
             markers[joint] = sphere
         }
@@ -71,7 +73,10 @@ final class JointMarkerOverlay {
         let pulse = 0.5 + 0.5 * sinf(Float(time) * 3.2)
 
         for (joint, entity) in markers {
-            guard let world = worldTransforms[joint] else {
+            if let trackedWorld = worldTransforms[joint] {
+                lastWorldTransforms[joint] = trackedWorld
+            }
+            guard let world = lastWorldTransforms[joint] else {
                 entity.isEnabled = false
                 continue
             }
@@ -104,5 +109,6 @@ final class JointMarkerOverlay {
     /// Hide every marker (called when the phantom hand is not being drawn).
     func hideAll() {
         for entity in markers.values { entity.isEnabled = false }
+        lastWorldTransforms.removeAll()
     }
 }

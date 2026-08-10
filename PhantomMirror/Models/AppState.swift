@@ -6,6 +6,9 @@ import ARKit
 @MainActor
 @Observable
 final class AppState {
+    private static let savedCalibrationKey = "PhantomMirror.savedCalibration.v3"
+    private static let savedMissingSideKey = "PhantomMirror.savedMissingSide.v1"
+
     enum Phase: String {
         case welcome
         case onboarding
@@ -17,6 +20,7 @@ final class AppState {
 
     enum CalibrationTab: String, CaseIterable, Identifiable {
         case pose
+        case skin
         case joints
 
         var id: String { rawValue }
@@ -24,6 +28,7 @@ final class AppState {
         var title: String {
             switch self {
             case .pose: return "Pose"
+            case .skin: return "Skin Rig"
             case .joints: return "Joints"
             }
         }
@@ -54,8 +59,22 @@ final class AppState {
     }
 
     var phase: Phase = .welcome
-    var missingSide: MissingSide = .right
-    var calibration = CalibrationData()
+    var missingSide: MissingSide = .right {
+        didSet {
+            UserDefaults.standard.set(missingSide.rawValue, forKey: Self.savedMissingSideKey)
+        }
+    }
+    var calibration = CalibrationData() {
+        didSet {
+            var saved = calibration
+            // A binding reference belongs to one ARKit session and cannot be
+            // restored safely, but all visual alignment values can be.
+            saved.skinAlignmentConfirmed = false
+            if let data = try? JSONEncoder().encode(saved) {
+                UserDefaults.standard.set(data, forKey: Self.savedCalibrationKey)
+            }
+        }
+    }
     var session = SessionReport()
     var immersiveOpen = false
     /// Optional demo overlay of the intact side. Classic mirror therapy shows only the phantom.
@@ -69,12 +88,27 @@ final class AppState {
     var selectedJoint: HandSkeleton.JointName = .wrist
     /// Joint nudge step in meters (UI can change this).
     var jointOffsetStep: Float = CalibrationData.jointOffsetStep
+    var skinTranslationStep: Float = 0.10
+    var skinRotationStepDegrees: Float = 5
 
     /// Live status for HUD.
     var trackingStatus: String = "Waiting for hand tracking…"
     var handUpdateIntervalMs: Double = 0
     var currentTaskIndex: Int = 0
     var taskInstruction: String = ""
+
+    init() {
+        let defaults = UserDefaults.standard
+        if let rawSide = defaults.string(forKey: Self.savedMissingSideKey),
+           let restoredSide = MissingSide(rawValue: rawSide) {
+            missingSide = restoredSide
+        }
+        if let data = defaults.data(forKey: Self.savedCalibrationKey),
+           var restored = try? JSONDecoder().decode(CalibrationData.self, from: data) {
+            restored.skinAlignmentConfirmed = false
+            calibration = restored
+        }
+    }
 
     func nudgeSelectedJoint(axis: Int, delta: Float) {
         var next = calibration
@@ -91,6 +125,12 @@ final class AppState {
     func resetAllJointOffsets() {
         var next = calibration
         next.resetJointOffsets()
+        calibration = next
+    }
+
+    func resetSkinAlignment() {
+        var next = calibration
+        next.resetSkinAlignment()
         calibration = next
     }
 

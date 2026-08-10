@@ -25,7 +25,8 @@ final class HandSceneController {
 
     /// Debug markers drawn on every phantom joint so the user can see which bone
     /// their calibration UI is currently editing. Hidden during training.
-    let jointMarkers = JointMarkerOverlay()
+    let jointMarkers: JointMarkerOverlay
+    let skinRig: SkinRigAlignmentController
     let celebration = CelebrationEffect()
 
     private var hintEntity: ModelEntity?
@@ -33,6 +34,7 @@ final class HandSceneController {
     private(set) var modelsReady = false
     private(set) var statusDetail: String = "Models not loaded"
     private(set) var jointCountLastFrame: Int = 0
+    private(set) var inferredJointCountLastFrame: Int = 0
     private(set) var usingFallback: Bool = false
     /// True only while the phantom is driven by a live intact-hand skeleton.
     private(set) var isShowingTrackedHand = false
@@ -41,10 +43,13 @@ final class HandSceneController {
     private var lastCelebrationUpdateTime: CFTimeInterval?
     /// Last good head pose — used when DeviceAnchor briefly drops so we don't blank the hand.
     private(set) var lastHeadPose: simd_float4x4?
+    private var mirrorReferenceHeadPose: simd_float4x4?
 
     /// Most recent hand world transforms — reused by overlays and training tasks.
     private(set) var lastIntactWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
     private(set) var lastPhantomWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
+    private var lastReliableJointLocals: [HandSkeleton.JointName: simd_float4x4] = [:]
+    private var cachedIntactIsLeft: Bool?
 
     /// Tip positions for training tasks (world space).
     private(set) var lastIntactIndexTip: SIMD3<Float>?
@@ -52,6 +57,9 @@ final class HandSceneController {
     private(set) var lastPhantomOpenness: Float?
 
     init() {
+        let debugSortGroup = ModelSortGroup(depthPass: .postPass)
+        jointMarkers = JointMarkerOverlay(sortGroup: debugSortGroup)
+        skinRig = SkinRigAlignmentController(sortGroup: debugSortGroup)
         fallbackIntact = VirtualHandVisualizer(name: "fallbackIntact", color: .systemCyan)
         fallbackPhantom = VirtualHandVisualizer(
             name: "fallbackPhantom",
@@ -65,13 +73,15 @@ final class HandSceneController {
         bricks: BrickBuilderPlayground
     ) {
         if isBuilt {
-            // ImmersiveSpace reuse keeps the same entity graph — wipe leftover props.
-            tasks.clearSceneProps()
-            bricks.deactivate()
+            // ImmersiveView owns phase cleanup. Clearing here can race its onAppear
+            // and remove training props that were just spawned for a reopened space.
             celebration.clear()
             lastCelebrationTrigger = 0
             lastGrandCelebrationTrigger = 0
-            if root.parent == nil { content.add(root) }
+            // A reused entity can briefly retain its previous RealityView parent.
+            // Reparent explicitly so reopening never leaves the new space empty.
+            root.removeFromParent()
+            content.add(root)
             return
         }
 
@@ -82,6 +92,7 @@ final class HandSceneController {
         root.addChild(fallbackIntact.root)
         root.addChild(fallbackPhantom.root)
         root.addChild(jointMarkers.root)
+        root.addChild(skinRig.root)
         root.addChild(tasks.orbRoot)
         root.addChild(tasks.cubeRoot)
         root.addChild(tasks.sliceRoot)
@@ -106,6 +117,7 @@ final class HandSceneController {
     }
 
     func loadModels() async {
+        await skinRig.loadModel()
         phantomUSDZ.setVisible(false)
         intactUSDZ.setVisible(false)
         usingFallback = true
@@ -136,12 +148,19 @@ final class HandSceneController {
         lastGrandCelebrationTrigger = 0
         lastCelebrationUpdateTime = nil
         lastHeadPose = nil
+        mirrorReferenceHeadPose = nil
+        lastReliableJointLocals.removeAll()
+        cachedIntactIsLeft = nil
         celebration.clear()
+        skinRig.setVisible(false)
         root.removeFromParent()
     }
 
     func rememberHeadPose(_ headPose: simd_float4x4) {
         lastHeadPose = headPose
+        if mirrorReferenceHeadPose == nil {
+            mirrorReferenceHeadPose = headPose
+        }
     }
 
     func updateCelebration(
@@ -172,12 +191,53 @@ final class HandSceneController {
         intactIsLeft: Bool,
         showIntact: Bool
     ) {
+        if cachedIntactIsLeft != intactIsLeft {
+            lastReliableJointLocals.removeAll()
+            cachedIntactIsLeft = intactIsLeft
+        }
+
+        // Keep the most recent reliable parent-relative transform for every
+        // joint. During self-occlusion, that local relationship is propagated
+        // through the currently tracked parent chain instead of deleting the point.
+        var localTransforms: [HandSkeleton.JointName: simd_float4x4] = [:]
+        var inferredCount = 0
+        for name in HandSkeleton.JointName.allCases {
+            let joint = skeleton.joint(name)
+            if joint.isTracked {
+                let local = joint.parentFromJointTransform
+                lastReliableJointLocals[name] = local
+                localTransforms[name] = local
+            } else {
+                inferredCount += 1
+                localTransforms[name] = lastReliableJointLocals[name]
+                    ?? joint.parentFromJointTransform
+            }
+        }
+
+        var anchorTransforms: [HandSkeleton.JointName: simd_float4x4] = [:]
+        var unresolved = Set(HandSkeleton.JointName.allCases)
+        while !unresolved.isEmpty {
+            var resolvedThisPass: [HandSkeleton.JointName] = []
+            for name in unresolved {
+                guard let local = localTransforms[name] else { continue }
+                if let parent = Self.jointParent[name] {
+                    guard let parentAnchor = anchorTransforms[parent] else { continue }
+                    anchorTransforms[name] = parentAnchor * local
+                } else {
+                    anchorTransforms[name] = local
+                }
+                resolvedThisPass.append(name)
+            }
+            guard !resolvedThisPass.isEmpty else { break }
+            for name in resolvedThisPass { unresolved.remove(name) }
+        }
+
         // World joint map for tips / openness / fallback.
         var intactWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
         for name in HandSkeleton.JointName.allCases {
-            let joint = skeleton.joint(name)
-            guard joint.isTracked else { continue }
-            intactWorld[name] = wristWorld * joint.anchorFromJointTransform
+            let jointAnchor = anchorTransforms[name]
+                ?? skeleton.joint(name).anchorFromJointTransform
+            intactWorld[name] = wristWorld * jointAnchor
         }
 
         guard !intactWorld.isEmpty else {
@@ -192,18 +252,24 @@ final class HandSceneController {
             return
         }
 
-        // Always mirror across the *current* head midline. Freezing the first head pose
-        // left the sagittal plane stranded at world origin / old position, so the phantom
-        // often appeared meters away when calibration opened.
         lastHeadPose = headPose
+        if mirrorReferenceHeadPose == nil {
+            mirrorReferenceHeadPose = headPose
+        }
+        let referenceHead = mirrorReferenceHeadPose ?? headPose
+        let rigidHeadDelta = MirrorTransform.rigidHorizontalHeadDelta(
+            from: referenceHead,
+            to: headPose
+        )
         var phantomWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
         for (name, worldT) in intactWorld {
-            let mirrored = MirrorTransform.mirror(worldT, headPose: headPose)
-            phantomWorld[name] = MirrorTransform.applyCalibration(
+            let mirrored = MirrorTransform.mirror(worldT, headPose: referenceHead)
+            let calibrated = MirrorTransform.applyCalibration(
                 mirrored,
                 calibration: calibration,
-                headPose: headPose
+                headPose: referenceHead
             )
+            phantomWorld[name] = rigidHeadDelta * calibrated
         }
         phantomWorld = Self.applyJointOffsets(calibration.jointOffsetMap, to: phantomWorld)
 
@@ -213,6 +279,7 @@ final class HandSceneController {
         lastPhantomOpenness = fallbackPhantom.gripOpenness(from: phantomWorld)
         lastPhantomWorld = phantomWorld
         jointCountLastFrame = intactWorld.count
+        inferredJointCountLastFrame = inferredCount
         isShowingTrackedHand = true
         setHintVisible(false)
 
@@ -235,14 +302,38 @@ final class HandSceneController {
         fallbackIntact.setVisible(false)
         fallbackPhantom.setVisible(false)
         jointMarkers.hideAll()
+        skinRig.setVisible(false)
         setHintVisible(showHint)
         jointCountLastFrame = 0
+        inferredJointCountLastFrame = 0
         isShowingTrackedHand = false
         lastIntactWorld = [:]
         lastIntactIndexTip = nil
         lastPhantomIndexTip = nil
         lastPhantomOpenness = nil
         lastPhantomWorld = [:]
+    }
+
+    func updateSkinRig(
+        calibration: CalibrationData,
+        visible: Bool,
+        phantomIsLeft: Bool,
+        isLiveTracked: Bool,
+        showDebugSkeleton: Bool,
+        autoBind: Bool,
+        manualManipulationEnabled: Bool
+    ) {
+        skinRig.update(
+            worldTransforms: lastPhantomWorld,
+            calibration: calibration,
+            visible: visible,
+            phantomIsLeft: phantomIsLeft,
+            isLiveTracked: isLiveTracked,
+            autoBind: autoBind,
+            manualManipulationEnabled: manualManipulationEnabled
+        )
+        let skinIsVisible = visible && calibration.showSkinRig && skinRig.isLoaded
+        fallbackPhantom.setVisible(showDebugSkeleton || !skinIsVisible)
     }
 
     /// Prefer keeping a visible preview instead of a blank scene when tracking drops.
@@ -264,7 +355,16 @@ final class HandSceneController {
                 headPose: pose
             )
         } else {
-            hideHands(showHint: showHintIfNoPose)
+            // Tracking and the first head pose arrive asynchronously. Use the
+            // fixed simulator placement meanwhile instead of presenting a blank scene.
+            showPreview(
+                showIntact: showIntact,
+                phantomIsLeft: phantomIsLeft,
+                jointOffsets: jointOffsets,
+                phantomScale: phantomScale,
+                headPose: nil
+            )
+            setHintVisible(showHintIfNoPose)
         }
     }
 
@@ -303,6 +403,7 @@ final class HandSceneController {
         fallbackPhantom.setVisible(true)
         fallbackPhantom.update(worldTransforms: phantomPose, scale: phantomScale)
         jointCountLastFrame = phantomPose.count
+        inferredJointCountLastFrame = 0
         isShowingTrackedHand = false
         lastIntactWorld = intactPose
         lastIntactIndexTip = intactPose[.indexFingerTip]?.translation
@@ -328,6 +429,35 @@ final class HandSceneController {
         }
         return adjusted
     }
+
+    private static let jointParent: [HandSkeleton.JointName: HandSkeleton.JointName] = [
+        .thumbKnuckle: .wrist,
+        .thumbIntermediateBase: .thumbKnuckle,
+        .thumbIntermediateTip: .thumbIntermediateBase,
+        .thumbTip: .thumbIntermediateTip,
+        .indexFingerMetacarpal: .wrist,
+        .indexFingerKnuckle: .indexFingerMetacarpal,
+        .indexFingerIntermediateBase: .indexFingerKnuckle,
+        .indexFingerIntermediateTip: .indexFingerIntermediateBase,
+        .indexFingerTip: .indexFingerIntermediateTip,
+        .middleFingerMetacarpal: .wrist,
+        .middleFingerKnuckle: .middleFingerMetacarpal,
+        .middleFingerIntermediateBase: .middleFingerKnuckle,
+        .middleFingerIntermediateTip: .middleFingerIntermediateBase,
+        .middleFingerTip: .middleFingerIntermediateTip,
+        .ringFingerMetacarpal: .wrist,
+        .ringFingerKnuckle: .ringFingerMetacarpal,
+        .ringFingerIntermediateBase: .ringFingerKnuckle,
+        .ringFingerIntermediateTip: .ringFingerIntermediateBase,
+        .ringFingerTip: .ringFingerIntermediateTip,
+        .littleFingerMetacarpal: .wrist,
+        .littleFingerKnuckle: .littleFingerMetacarpal,
+        .littleFingerIntermediateBase: .littleFingerKnuckle,
+        .littleFingerIntermediateTip: .littleFingerIntermediateBase,
+        .littleFingerTip: .littleFingerIntermediateTip,
+        .forearmWrist: .wrist,
+        .forearmArm: .forearmWrist,
+    ]
 
     private static func makePreviewHandPose(
         wrist: SIMD3<Float>,

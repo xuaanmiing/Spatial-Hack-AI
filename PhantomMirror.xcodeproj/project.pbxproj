@@ -32,7 +32,10 @@
 		E9AECD959E72412BBE850BB8 /* PhantomMirrorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4EB5C3BBF36473495937FAD /* PhantomMirrorApp.swift */; };
 		F2A2B3C4D5E6478890ABCDEF /* HandArm_Right.usdz in Resources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6478890ABCDEF /* HandArm_Right.usdz */; };
 		F5430A9EEF784AC5AC5148F5 /* CalibrationData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E58945771FB4AEB8BAC593E /* CalibrationData.swift */; };
-		FF3E1B483026FE1A008878FE /* hand.usdc in Resources */ = {isa = PBXBuildFile; fileRef = FF3E1B473026FE1A008878FE /* hand.usdc */; };
+		6B22B2B2C3C3D4D4E5E5F501 /* FirstPersonHand_Left.usdc in Resources */ = {isa = PBXBuildFile; fileRef = 6B22B2B2C3C3D4D4E5E5F511 /* FirstPersonHand_Left.usdc */; };
+		6B22B2B2C3C3D4D4E5E5F502 /* FirstPersonHand_Right.usdc in Resources */ = {isa = PBXBuildFile; fileRef = 6B22B2B2C3C3D4D4E5E5F512 /* FirstPersonHand_Right.usdc */; };
+		5A11A1A1B2B2C3C3D4D4E501 /* SkinRigAlignmentController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11A1A1B2B2C3C3D4D4E511 /* SkinRigAlignmentController.swift */; };
+		5A11A1A1B2B2C3C3D4D4E502 /* SkinRigAlignmentPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A11A1A1B2B2C3C3D4D4E512 /* SkinRigAlignmentPanel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -64,7 +67,10 @@
 		E7DA53F4DCF34A888638F708 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		EEF04CE05FAB4BBD8238D429 /* TrainingHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingHUD.swift; sourceTree = "<group>"; };
 		F1A2B3C4D5E6478890ABCDEF /* HandArm_Right.usdz */ = {isa = PBXFileReference; lastKnownFileType = file.usdz; path = HandArm_Right.usdz; sourceTree = "<group>"; };
-		FF3E1B473026FE1A008878FE /* hand.usdc */ = {isa = PBXFileReference; lastKnownFileType = file; path = hand.usdc; sourceTree = "<group>"; };
+		6B22B2B2C3C3D4D4E5E5F511 /* FirstPersonHand_Left.usdc */ = {isa = PBXFileReference; lastKnownFileType = file; path = FirstPersonHand_Left.usdc; sourceTree = "<group>"; };
+		6B22B2B2C3C3D4D4E5E5F512 /* FirstPersonHand_Right.usdc */ = {isa = PBXFileReference; lastKnownFileType = file; path = FirstPersonHand_Right.usdc; sourceTree = "<group>"; };
+		5A11A1A1B2B2C3C3D4D4E511 /* SkinRigAlignmentController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkinRigAlignmentController.swift; sourceTree = "<group>"; };
+		5A11A1A1B2B2C3C3D4D4E512 /* SkinRigAlignmentPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkinRigAlignmentPanel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,7 +94,8 @@
 				E1B2C3D4E5F6478890ABCDEF /* Resources */,
 				E7DA53F4DCF34A888638F708 /* Info.plist */,
 				3F95D5435A3D46B8B7DABCE1 /* PhantomMirror.entitlements */,
-				FF3E1B473026FE1A008878FE /* hand.usdc */,
+				6B22B2B2C3C3D4D4E5E5F511 /* FirstPersonHand_Left.usdc */,
+				6B22B2B2C3C3D4D4E5E5F512 /* FirstPersonHand_Right.usdc */,
 			);
 			path = PhantomMirror;
 			sourceTree = "<group>";
@@ -106,6 +113,7 @@
 				C0FFEE11A2D104FEEDBAC010 /* AudioFeedback.swift */,
 				1756253FC9AF400B804EC260 /* TaskManager.swift */,
 				24A81B0E0B0A4C0EB0A1B0E0 /* BrickBuilderPlayground.swift */,
+				5A11A1A1B2B2C3C3D4D4E511 /* SkinRigAlignmentController.swift */,
 			);
 			path = Immersive;
 			sourceTree = "<group>";
@@ -120,6 +128,7 @@
 				C4D5E6F708194A2BB3C4D5E7 /* JointDebugPanel.swift */,
 				EEF04CE05FAB4BBD8238D429 /* TrainingHUD.swift */,
 				24A81B0E0B0A4C0EB0A1B0E2 /* PlaygroundHUD.swift */,
+				5A11A1A1B2B2C3C3D4D4E512 /* SkinRigAlignmentPanel.swift */,
 				BB76F33BE6184395B6EEFA4D /* ReportView.swift */,
 			);
 			path = Views;
@@ -217,7 +226,8 @@
 				A71E6B13D3044E42A5F69C10 /* Life_Size_Basic_Lego_Set.usdz in Resources */,
 				F2A2B3C4D5E6478890ABCDEF /* HandArm_Right.usdz in Resources */,
 				D1B2C3D4E5F6478890ABCDEF /* RightHand_ARKit27.usdz in Resources */,
-				FF3E1B483026FE1A008878FE /* hand.usdc in Resources */,
+				6B22B2B2C3C3D4D4E5E5F501 /* FirstPersonHand_Left.usdc in Resources */,
+				6B22B2B2C3C3D4D4E5E5F502 /* FirstPersonHand_Right.usdc in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -250,6 +260,8 @@
 				5633D2AC90AE465AA4E0A101 /* TrainingHUD.swift in Sources */,
 				24A81B0E0B0A4C0EB0A1B0E3 /* PlaygroundHUD.swift in Sources */,
 				991AEC39DD0347489D71750A /* ReportView.swift in Sources */,
+				5A11A1A1B2B2C3C3D4D4E501 /* SkinRigAlignmentController.swift in Sources */,
+				5A11A1A1B2B2C3C3D4D4E502 /* SkinRigAlignmentPanel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -263,7 +275,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = PT88AW8LKZ;
+				DEVELOPMENT_TEAM = BN3ZN745T6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PhantomMirror/Info.plist;
@@ -272,7 +284,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.albert.spatialhackai.phantommirror;
+				PRODUCT_BUNDLE_IDENTIFIER = com.spatialhack.phantommirror.yulunlego;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "xros xrsimulator";
@@ -308,7 +320,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = PT88AW8LKZ;
+				DEVELOPMENT_TEAM = BN3ZN745T6;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -357,7 +369,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = PT88AW8LKZ;
+				DEVELOPMENT_TEAM = BN3ZN745T6;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -382,7 +394,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = PT88AW8LKZ;
+				DEVELOPMENT_TEAM = BN3ZN745T6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PhantomMirror/Info.plist;
@@ -391,7 +403,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.albert.spatialhackai.phantommirror;
+				PRODUCT_BUNDLE_IDENTIFIER = com.spatialhack.phantommirror.yulunlego;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "xros xrsimulator";
