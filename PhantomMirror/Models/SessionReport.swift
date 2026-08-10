@@ -1,6 +1,6 @@
 import Foundation
 
-/// Session-level clinical + engineering record for one training session.
+/// Session-level record for one training session.
 ///
 /// The struct is fully `Codable` so it can be persisted to disk (see
 /// `SessionHistory`) and rehydrated for the trend chart on `ReportView`.
@@ -24,43 +24,10 @@ struct SessionReport: Codable, Equatable, Identifiable {
     var prePainNRS: Int = 0
     /// Post-session pain, recorded during the intake sheet.
     var postPainNRS: Int = 0
-    /// Worst PLP intensity over the previous 24 hours (post-session recall).
-    var postPainWorst24h: Int = 0
-    /// Average PLP intensity over the previous 24 hours (post-session recall).
-    var postPainAverage24h: Int = 0
-    /// Residual-limb (stump) pain at the time of the report.
-    var residualLimbPainNRS: Int = 0
-    /// Present Pain Intensity verbal anchor 0..5 (Melzack).
-    var postPainPPI: Int = 0
 
-    // MARK: - Pain quality (SF-MPQ)
-
-    /// Selected SF-MPQ descriptors and their intensities.
-    var sfMPQItems: [SFMPQItem] = []
-
-    // MARK: - Neuropathic screen (DN4)
-
-    /// Answers to the 4 self-report items of DN4 (Yes = true).
-    var dn4Answers: [Bool] = [false, false, false, false]
-    /// Convenience — count of `true` entries in `dn4Answers`.
-    var dn4Score: Int { dn4Answers.filter { $0 }.count }
-    var dn4IsNeuropathic: Bool { dn4Score >= ClinicalScales.dn4PositiveThreshold }
-
-    // MARK: - Phantom phenomena inventory
-
-    var telescopingPresent: Bool = false
-    var kineticSensations: Bool = false
-    var kinestheticSensations: Bool = false
-    var exteroceptiveSensations: Bool = false
-
-    // MARK: - Subjective session experience
-
-    /// Patient-reported control over the phantom during the session (0..10).
-    var phantomControllability: Int = 0
-    /// Mirror-illusion vividness (KVIQ-style, 0..5).
-    var mirrorVividness: Int = 0
-    /// Optional free-text note from the patient / clinician.
-    var subjectiveNotes: String = ""
+    /// Patient-reported pain-relief rating (0..10) collected in the single
+    /// post-session question. 0 = no relief, 10 = complete relief.
+    var painReliefRating: Int = 0
 
     // MARK: - Engineering / tracking
 
@@ -103,7 +70,8 @@ struct SessionReport: Codable, Equatable, Identifiable {
     }
 
     /// Change in current NRS pain between pre and post-session (negative =
-    /// improvement).
+    /// improvement). Derived from `painReliefRating` when the pre-session
+    /// baseline was set, otherwise 0.
     var nrsDelta: Int { postPainNRS - prePainNRS }
 
     /// Percentage change in NRS pain (0.0 baseline returns 0).
@@ -116,10 +84,6 @@ struct SessionReport: Codable, Equatable, Identifiable {
     var meetsMCID: Bool {
         prePainNRS > 0 && (-nrsDeltaFraction) >= ClinicalScales.mcidNRSReductionFraction
     }
-
-    var sfMPQSensoryScore: Int { ClinicalScales.sensorySubscore(from: sfMPQItems) }
-    var sfMPQAffectiveScore: Int { ClinicalScales.affectiveSubscore(from: sfMPQItems) }
-    var sfMPQTotalScore: Int { sfMPQSensoryScore + sfMPQAffectiveScore }
 
     /// Average per-task completion time (seconds) — 0 if no tasks recorded.
     var averageTaskDurationSeconds: Double {
