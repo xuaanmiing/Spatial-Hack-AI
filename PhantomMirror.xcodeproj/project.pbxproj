@@ -11,7 +11,6 @@
 		24842030DCFA480AB61592FC /* TaskManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1756253FC9AF400B804EC260 /* TaskManager.swift */; };
 		24A81B0E0B0A4C0EB0A1B0E1 /* BrickBuilderPlayground.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24A81B0E0B0A4C0EB0A1B0E0 /* BrickBuilderPlayground.swift */; };
 		24A81B0E0B0A4C0EB0A1B0E3 /* PlaygroundHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24A81B0E0B0A4C0EB0A1B0E2 /* PlaygroundHUD.swift */; };
-		A71E6B13D3044E42A5F69C10 /* Life_Size_Basic_Lego_Set.usdz in Resources */ = {isa = PBXBuildFile; fileRef = A71E6B13D3044E42A5F69C11 /* Life_Size_Basic_Lego_Set.usdz */; };
 		5056483FE8EE49B9A13C3951 /* HandSceneController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51BC6C2FEB4F4086BF84E656 /* HandSceneController.swift */; };
 		52C616D2A2A1480B83F16283 /* MirrorTransform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6F8CFE04E441D598572C43 /* MirrorTransform.swift */; };
 		5633D2AC90AE465AA4E0A101 /* TrainingHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEF04CE05FAB4BBD8238D429 /* TrainingHUD.swift */; };
@@ -42,7 +41,6 @@
 		1756253FC9AF400B804EC260 /* TaskManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskManager.swift; sourceTree = "<group>"; };
 		24A81B0E0B0A4C0EB0A1B0E0 /* BrickBuilderPlayground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrickBuilderPlayground.swift; sourceTree = "<group>"; };
 		24A81B0E0B0A4C0EB0A1B0E2 /* PlaygroundHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaygroundHUD.swift; sourceTree = "<group>"; };
-		A71E6B13D3044E42A5F69C11 /* Life_Size_Basic_Lego_Set.usdz */ = {isa = PBXFileReference; lastKnownFileType = file.usdz; path = Life_Size_Basic_Lego_Set.usdz; sourceTree = "<group>"; };
 		1A6F8CFE04E441D598572C43 /* MirrorTransform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorTransform.swift; sourceTree = "<group>"; };
 		22379AD3D5EC45DFBCD082A4 /* CalibrationPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationPanel.swift; sourceTree = "<group>"; };
 		2AF3EAAFD83E4237AA22EA9D /* VirtualHandVisualizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualHandVisualizer.swift; sourceTree = "<group>"; };
@@ -145,7 +143,6 @@
 		E1B2C3D4E5F6478890ABCDEF /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				A71E6B13D3044E42A5F69C11 /* Life_Size_Basic_Lego_Set.usdz */,
 				F1A2B3C4D5E6478890ABCDEF /* HandArm_Right.usdz */,
 				C1B2C3D4E5F6478890ABCDEF /* RightHand_ARKit27.usdz */,
 			);
@@ -223,7 +220,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A71E6B13D3044E42A5F69C10 /* Life_Size_Basic_Lego_Set.usdz in Resources */,
 				F2A2B3C4D5E6478890ABCDEF /* HandArm_Right.usdz in Resources */,
 				D1B2C3D4E5F6478890ABCDEF /* RightHand_ARKit27.usdz in Resources */,
 				6B22B2B2C3C3D4D4E5E5F501 /* FirstPersonHand_Left.usdc in Resources */,

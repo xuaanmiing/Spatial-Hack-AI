@@ -7,17 +7,21 @@ struct SkinRigAlignmentPanel: View {
     @Environment(HandSceneController.self) private var scene
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                header
-                visibilityControl
-                translationControls
-                rotationControls
-                scaleControl
-                confirmationControls
-                mappingSummary
+        VStack(alignment: .leading, spacing: 14) {
+            header
+            visibilityControl
+            confirmationControls
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    translationControls
+                    rotationControls
+                    scaleControl
+                    mappingSummary
+                }
+                .padding(.trailing, 4)
             }
-            .padding(.trailing, 4)
         }
         .frame(maxHeight: 610)
     }
@@ -32,7 +36,7 @@ struct SkinRigAlignmentPanel: View {
                 Spacer()
                 statusBadge
             }
-            Text("Align the palm only. On confirmation, the wrist stays locked while the forearm bends toward the two forearm points.")
+            Text("Place the skin near the palm. Confirm anchors the wrist and follows joint rotations while preserving the skin's original bone lengths.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineSpacing(2)
@@ -139,16 +143,16 @@ struct SkinRigAlignmentPanel: View {
                 Label("Reset", systemImage: "arrow.counterclockwise")
             }
             .buttonStyle(.bordered)
-
-            Spacer()
+            .frame(maxWidth: .infinity)
 
             Button {
                 confirmAlignment()
             } label: {
-                Label("Confirm & Map", systemImage: "point.3.connected.trianglepath.dotted")
+                Text("Combine")
             }
             .buttonStyle(.borderedProminent)
             .tint(.pink)
+            .frame(maxWidth: .infinity)
             .disabled(
                 scene.skinRig.isBound
                     || !scene.skinRig.isLoaded
@@ -161,6 +165,7 @@ struct SkinRigAlignmentPanel: View {
                 Label("Unbind", systemImage: "link.badge.minus")
             }
             .buttonStyle(.borderedProminent)
+            .frame(maxWidth: .infinity)
             .disabled(!scene.skinRig.isBound)
         }
     }
@@ -168,7 +173,7 @@ struct SkinRigAlignmentPanel: View {
     private var mappingSummary: some View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Manual alignment uses only the palm. After confirmation, the hidden forearm root rotates around the locked wrist to follow the forearm direction.")
+                Text("Manual placement defines each model bone's axis basis. Binding keeps all authored joint spacing unchanged, anchors the wrist, and converts ARKit rotations into the model's local axes.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 

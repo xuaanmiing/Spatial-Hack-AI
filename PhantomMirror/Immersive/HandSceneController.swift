@@ -43,13 +43,13 @@ final class HandSceneController {
     private var lastCelebrationUpdateTime: CFTimeInterval?
     /// Last good head pose — used when DeviceAnchor briefly drops so we don't blank the hand.
     private(set) var lastHeadPose: simd_float4x4?
-    private var mirrorReferenceHeadPose: simd_float4x4?
 
     /// Most recent hand world transforms — reused by overlays and training tasks.
     private(set) var lastIntactWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
     private(set) var lastPhantomWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
     private var lastReliableJointLocals: [HandSkeleton.JointName: simd_float4x4] = [:]
     private var cachedIntactIsLeft: Bool?
+    private var attachedSessionID: Int?
 
     /// Tip positions for training tasks (world space).
     private(set) var lastIntactIndexTip: SIMD3<Float>?
@@ -70,7 +70,8 @@ final class HandSceneController {
     func attach(
         to content: RealityViewContent,
         tasks: TaskManager,
-        bricks: BrickBuilderPlayground
+        bricks: BrickBuilderPlayground,
+        sessionID: Int
     ) {
         if isBuilt {
             // ImmersiveView owns phase cleanup. Clearing here can race its onAppear
@@ -82,6 +83,8 @@ final class HandSceneController {
             // Reparent explicitly so reopening never leaves the new space empty.
             root.removeFromParent()
             content.add(root)
+            root.isEnabled = true
+            attachedSessionID = sessionID
             return
         }
 
@@ -114,6 +117,15 @@ final class HandSceneController {
         phantomUSDZ.setVisible(false)
         intactUSDZ.setVisible(false)
         isBuilt = true
+        attachedSessionID = sessionID
+    }
+
+    func ensureAttached(to content: RealityViewContent, sessionID: Int) {
+        guard isBuilt, attachedSessionID != sessionID else { return }
+        root.removeFromParent()
+        content.add(root)
+        root.isEnabled = true
+        attachedSessionID = sessionID
     }
 
     func loadModels() async {
@@ -123,6 +135,14 @@ final class HandSceneController {
         usingFallback = true
         modelsReady = true
         statusDetail = "Blue calibrated skeleton"
+    }
+
+    func prepareForNewTrackingSession() {
+        lastHeadPose = nil
+        lastReliableJointLocals.removeAll()
+        cachedIntactIsLeft = nil
+        hideHands(showHint: false)
+        skinRig.resetForNewTrackingSession()
     }
 
     func setHintVisible(_ visible: Bool) {
@@ -148,19 +168,18 @@ final class HandSceneController {
         lastGrandCelebrationTrigger = 0
         lastCelebrationUpdateTime = nil
         lastHeadPose = nil
-        mirrorReferenceHeadPose = nil
         lastReliableJointLocals.removeAll()
         cachedIntactIsLeft = nil
         celebration.clear()
-        skinRig.setVisible(false)
-        root.removeFromParent()
+        hideHands(showHint: false)
+        // Keep the root attached because visionOS may reuse this RealityView on
+        // the next ImmersiveSpace open without running its make closure again.
+        // A newly created RealityView is still handled by attach(to:), which
+        // reparents the root into the new content.
     }
 
     func rememberHeadPose(_ headPose: simd_float4x4) {
         lastHeadPose = headPose
-        if mirrorReferenceHeadPose == nil {
-            mirrorReferenceHeadPose = headPose
-        }
     }
 
     func updateCelebration(
@@ -253,25 +272,26 @@ final class HandSceneController {
         }
 
         lastHeadPose = headPose
-        if mirrorReferenceHeadPose == nil {
-            mirrorReferenceHeadPose = headPose
-        }
-        let referenceHead = mirrorReferenceHeadPose ?? headPose
-        let rigidHeadDelta = MirrorTransform.rigidHorizontalHeadDelta(
-            from: referenceHead,
-            to: headPose
-        )
+        var symmetryCalibration = calibration
+        // Live mirror therapy must preserve the intact hand's height, depth,
+        // and bone lengths. Keep only an optional lateral placement correction;
+        // skin alignment has its own independent XYZ controls.
+        symmetryCalibration.phantomOffset.y = 0
+        symmetryCalibration.phantomOffset.z = 0
+        symmetryCalibration.phantomScale = 1
         var phantomWorld: [HandSkeleton.JointName: simd_float4x4] = [:]
         for (name, worldT) in intactWorld {
-            let mirrored = MirrorTransform.mirror(worldT, headPose: referenceHead)
+            // Reflect in the current vertical head-midline plane. In that
+            // plane's coordinates this negates X only; Y and depth Z remain
+            // identical to the intact hand on every frame.
+            let mirrored = MirrorTransform.mirror(worldT, headPose: headPose)
             let calibrated = MirrorTransform.applyCalibration(
                 mirrored,
-                calibration: calibration,
-                headPose: referenceHead
+                calibration: symmetryCalibration,
+                headPose: headPose
             )
-            phantomWorld[name] = rigidHeadDelta * calibrated
+            phantomWorld[name] = calibrated
         }
-        phantomWorld = Self.applyJointOffsets(calibration.jointOffsetMap, to: phantomWorld)
 
         lastIntactWorld = intactWorld
         lastIntactIndexTip = intactWorld[.indexFingerTip]?.translation
@@ -287,7 +307,7 @@ final class HandSceneController {
         intactUSDZ.setVisible(false)
 
         fallbackPhantom.setVisible(true)
-        fallbackPhantom.update(worldTransforms: phantomWorld, scale: calibration.phantomScale)
+        fallbackPhantom.update(worldTransforms: phantomWorld)
 
         fallbackIntact.setVisible(showIntact)
         if showIntact {
@@ -421,11 +441,48 @@ final class HandSceneController {
     ) -> [HandSkeleton.JointName: simd_float4x4] {
         guard !offsets.isEmpty else { return transforms }
 
-        var adjusted = transforms
-        for (joint, offset) in offsets {
-            guard var transform = adjusted[joint] else { continue }
-            transform.columns.3 += SIMD4(offset.x, offset.y, offset.z, 0)
-            adjusted[joint] = transform
+        // Offsets are authored in each joint's parent frame. Rebuild the world
+        // hierarchy so a parent correction is inherited by every descendant;
+        // adding these vectors directly in world space makes mirrored Z depth
+        // change as the hand rotates and disconnects each finger chain.
+        var adjusted: [HandSkeleton.JointName: simd_float4x4] = [:]
+        var unresolved = Set(transforms.keys)
+        while !unresolved.isEmpty {
+            var resolvedThisPass: [HandSkeleton.JointName] = []
+            for joint in unresolved {
+                guard let originalWorld = transforms[joint] else { continue }
+
+                if let parent = jointParent[joint] {
+                    guard let originalParentWorld = transforms[parent],
+                          let adjustedParentWorld = adjusted[parent] else { continue }
+                    var local = simd_inverse(originalParentWorld) * originalWorld
+                    if let offset = offsets[joint] {
+                        local.columns.3 += SIMD4(offset, 0)
+                    }
+                    adjusted[joint] = adjustedParentWorld * local
+                } else {
+                    var rootWorld = originalWorld
+                    if let offset = offsets[joint] {
+                        rootWorld.columns.3 += SIMD4(offset, 0)
+                    }
+                    adjusted[joint] = rootWorld
+                }
+                resolvedThisPass.append(joint)
+            }
+
+            guard !resolvedThisPass.isEmpty else {
+                // Keep any unexpected orphan joints visible instead of dropping
+                // them if ARKit adds a relationship we do not know yet.
+                for joint in unresolved {
+                    if let transform = transforms[joint] {
+                        adjusted[joint] = transform
+                    }
+                }
+                break
+            }
+            for joint in resolvedThisPass {
+                unresolved.remove(joint)
+            }
         }
         return adjusted
     }

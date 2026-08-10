@@ -77,6 +77,7 @@ final class AppState {
     }
     var session = SessionReport()
     var immersiveOpen = false
+    private(set) var immersiveSessionID = 0
     /// Optional demo overlay of the intact side. Classic mirror therapy shows only the phantom.
     var showVirtualIntactHand = false
     /// When false, real hands stay visible and composite above virtual props.
@@ -105,6 +106,7 @@ final class AppState {
         }
         if let data = defaults.data(forKey: Self.savedCalibrationKey),
            var restored = try? JSONDecoder().decode(CalibrationData.self, from: data) {
+            restored.migrateSkinTranslationPresetIfNeeded()
             restored.skinAlignmentConfirmed = false
             calibration = restored
         }
@@ -151,7 +153,7 @@ final class AppState {
 
     func beginCalibration() {
         phase = .calibration
-        immersiveOpen = true
+        requestImmersiveOpen()
     }
 
     func beginTraining() {
@@ -161,7 +163,7 @@ final class AppState {
         session.prePainNRS = baselinePain
         session.totalTasks = TaskManager.TaskKind.allCases.count
         phase = .training
-        immersiveOpen = true
+        requestImmersiveOpen()
         currentTaskIndex = 0
     }
 
@@ -176,7 +178,7 @@ final class AppState {
         taskInstruction = ""
         trackingStatus = "Opening brick playground…"
         phase = .playground
-        immersiveOpen = true
+        requestImmersiveOpen()
     }
 
     func endPlayground() {
@@ -190,5 +192,15 @@ final class AppState {
         phase = .onboarding
         immersiveOpen = false
         resetSession()
+    }
+
+    private func requestImmersiveOpen() {
+        if !immersiveOpen {
+            immersiveSessionID += 1
+            var next = calibration
+            next.skinAlignmentConfirmed = false
+            calibration = next
+        }
+        immersiveOpen = true
     }
 }

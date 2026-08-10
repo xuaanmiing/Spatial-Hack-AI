@@ -33,10 +33,12 @@ final class JointMarkerOverlay {
 
     init(sortGroup: ModelSortGroup = ModelSortGroup(depthPass: .postPass)) {
         root.name = "jointMarkers"
+        let markerMesh = MeshResource.generateSphere(radius: baseRadius)
+        let markerMaterial = UnlitMaterial(color: idleColor)
         for joint in CalibrationData.adjustableJoints {
             let sphere = ModelEntity(
-                mesh: .generateSphere(radius: baseRadius),
-                materials: [UnlitMaterial(color: idleColor)]
+                mesh: markerMesh,
+                materials: [markerMaterial]
             )
             sphere.name = "marker-\(CalibrationData.jointKey(joint))"
             sphere.isEnabled = false

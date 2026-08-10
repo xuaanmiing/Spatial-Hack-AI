@@ -13,8 +13,18 @@ struct ImmersiveView: View {
 
     var body: some View {
         RealityView { content in
-            scene.attach(to: content, tasks: tasks, bricks: bricks)
+            scene.attach(
+                to: content,
+                tasks: tasks,
+                bricks: bricks,
+                sessionID: appState.immersiveSessionID
+            )
             scene.setHintVisible(true)
+        } update: { content in
+            scene.ensureAttached(
+                to: content,
+                sessionID: appState.immersiveSessionID
+            )
         }
         .gesture(
             SpatialTapGesture()
@@ -33,10 +43,18 @@ struct ImmersiveView: View {
         // `.visible` keeps passthrough hands above virtual props.
         // `.hidden` draws all virtual content over the real hands.
         .upperLimbVisibility(appState.hideRealUpperLimbs ? .hidden : .visible)
-        .task {
-            await scene.loadModels()
-            await bricks.loadBrickModels()
-            await setupTracking()
+        .task(id: appState.immersiveSessionID) {
+            // Tracking startup and USD parsing are independent. Running them
+            // together avoids paying both waits back-to-back on every reopen.
+            scene.prepareForNewTrackingSession()
+            async let trackingSetup: Void = setupTracking()
+            async let modelLoading: Void = scene.loadModels()
+            await trackingSetup
+            await modelLoading
+            updateSkinRigForCurrentPhase()
+            if appState.phase == .playground {
+                await bricks.loadBrickModels()
+            }
         }
         .task(id: appState.phase) {
             // Keep a head-relative phantom visible while waiting for the intact hand.
@@ -219,6 +237,9 @@ struct ImmersiveView: View {
     private func startBrickPlayground() {
         bricks.activate()
         appState.taskInstruction = bricks.instruction
+        Task {
+            await bricks.loadBrickModels()
+        }
     }
 
     private func setupTracking() async {

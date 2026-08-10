@@ -3,13 +3,18 @@ import simd
 import ARKit
 
 struct CalibrationData: Codable, Equatable {
-    private static let defaultSkinCenter = SIMD3<Float>(
+    private static let baseSkinCenter = SIMD3<Float>(
         0.91588604, -1.3858759, -0.3796959
     )
+    private static let defaultSkinTranslation = SIMD3<Float>(
+        -0.03, -0.27, 0.14
+    )
+    private static let defaultSkinCenter = baseSkinCenter + defaultSkinTranslation
     private static let defaultSkinRotation = SIMD4<Float>(
         0.41597965, -0.71764684, -0.54932106, 0.10094717
     )
     private static let defaultSkinScale: Float = 1.0
+    private static let currentSkinTranslationPresetVersion = 2
 
     /// Head-yaw-relative offset applied after mirroring, in meters.
     var phantomOffset: SIMD3<Float> = .zero
@@ -26,7 +31,7 @@ struct CalibrationData: Codable, Equatable {
 
     /// Global transform used to align the selected handed skin with the procedural ARKit skeleton.
     /// User adjustment relative to the recorded default alignment.
-    var skinOffset: SIMD3<Float> = .zero
+    var skinOffset: SIMD3<Float> = Self.defaultSkinTranslation
     /// Current model center expressed in the fixed alignment frame. This is
     /// separate from the slider values because fixed-origin rotation also
     /// rotates the model center around that origin.
@@ -38,6 +43,7 @@ struct CalibrationData: Codable, Equatable {
     var skinScale: Float = Self.defaultSkinScale
     var showSkinRig = true
     var skinAlignmentConfirmed = false
+    var skinTranslationPresetVersion: Int? = Self.currentSkinTranslationPresetVersion
 
     static let offsetStep: Float = 0.1
     static let scaleStep: Float = 0.05
@@ -77,12 +83,26 @@ struct CalibrationData: Codable, Equatable {
     }
 
     mutating func resetSkinAlignment() {
-        skinOffset = .zero
+        skinOffset = Self.defaultSkinTranslation
         skinModelCenterOffset = Self.defaultSkinCenter
         skinRotationDegrees = .zero
         skinRotationQuaternionVector = Self.defaultSkinRotation
         skinScale = Self.defaultSkinScale
         showSkinRig = true
+        skinAlignmentConfirmed = false
+        skinTranslationPresetVersion = Self.currentSkinTranslationPresetVersion
+    }
+
+    /// Preserve saved rotation/scale tuning while moving older installs onto
+    /// the current photographed XYZ placement preset exactly once.
+    mutating func migrateSkinTranslationPresetIfNeeded() {
+        guard skinTranslationPresetVersion != Self.currentSkinTranslationPresetVersion else {
+            return
+        }
+        let translationDelta = Self.defaultSkinTranslation - skinOffset
+        skinModelCenterOffset = resolvedSkinModelCenterOffset + translationDelta
+        skinOffset = Self.defaultSkinTranslation
+        skinTranslationPresetVersion = Self.currentSkinTranslationPresetVersion
         skinAlignmentConfirmed = false
     }
 

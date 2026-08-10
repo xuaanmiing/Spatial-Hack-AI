@@ -55,10 +55,14 @@ final class VirtualHandVisualizer {
         root.name = name
         jointMaterial = UnlitMaterial(color: color)
         boneMaterial = UnlitMaterial(color: color.withAlphaComponent(0.9))
+        // Mesh generation is comparatively expensive on visionOS. Every joint
+        // and every bone can share immutable geometry and keep its own transform.
+        let jointMesh = MeshResource.generateSphere(radius: jointRadius)
+        let boneMesh = MeshResource.generateCylinder(height: 1, radius: boneRadius)
 
         for jointName in HandSkeleton.JointName.allCases {
             let sphere = ModelEntity(
-                mesh: .generateSphere(radius: jointRadius),
+                mesh: jointMesh,
                 materials: [jointMaterial]
             )
             sphere.name = "\(name)-\(jointName)"
@@ -70,7 +74,7 @@ final class VirtualHandVisualizer {
         for (child, parent) in Self.bonePairs {
             let key = "\(child)-\(parent)"
             let bone = ModelEntity(
-                mesh: .generateCylinder(height: 1, radius: boneRadius),
+                mesh: boneMesh,
                 materials: [boneMaterial]
             )
             bone.name = "\(name)-bone-\(key)"

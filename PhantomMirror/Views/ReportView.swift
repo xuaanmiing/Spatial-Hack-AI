@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReportView: View {
     @Environment(AppState.self) private var appState
+    @State private var isGeneratingClinicalNote = false
 
     var body: some View {
         NavigationStack {
@@ -36,6 +37,19 @@ struct ReportView: View {
             }
             .navigationTitle("Session Report")
             .navigationBarTitleDisplayMode(.inline)
+        }
+        .task(id: clinicalNoteInputID) {
+            // Let slider changes settle so a post-session pain adjustment causes
+            // one regeneration rather than one request per intermediate value.
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            let report = appState.session
+            isGeneratingClinicalNote = true
+            let result = await ClinicalNoteGenerator.generate(from: report)
+            guard !Task.isCancelled else { return }
+            appState.session.clinicalNote = result.text
+            appState.session.clinicalNoteUsesOnDeviceModel = result.usedOnDeviceModel
+            isGeneratingClinicalNote = false
         }
     }
     
@@ -183,13 +197,42 @@ struct ReportView: View {
                 Text("Clinical Note")
                     .font(.headline)
             }
-            Text("Intact-hand joints from ARKit HandTrackingProvider were reflected across the head sagittal plane into a contralateral phantom hand — classic mirror therapy, zero external sensors, on Vision Pro.")
+            if isGeneratingClinicalNote && appState.session.clinicalNote.isEmpty {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Generating session summary…")
+                        .foregroundStyle(.secondary)
+                }
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineSpacing(4)
+            } else {
+                Text(appState.session.clinicalNote.isEmpty
+                     ? ClinicalNoteGenerator.fallbackText(for: appState.session)
+                     : appState.session.clinicalNote)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(4)
+            }
+            Text(appState.session.clinicalNoteUsesOnDeviceModel
+                 ? "Generated on device from session measurements. Descriptive only; not a clinical assessment."
+                 : "Generated locally from session measurements. Descriptive only; not a clinical assessment.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var clinicalNoteInputID: String {
+        let session = appState.session
+        return [
+            String(session.startedAt?.timeIntervalSinceReferenceDate ?? 0),
+            String(session.endedAt?.timeIntervalSinceReferenceDate ?? 0),
+            String(session.tasksCompleted),
+            String(session.framesTracked),
+            String(session.framesLost),
+            String(session.prePainNRS),
+            String(session.postPainNRS)
+        ].joined(separator: "|")
     }
 }

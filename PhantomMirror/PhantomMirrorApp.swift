@@ -19,7 +19,6 @@ struct PhantomMirrorApp: App {
                 .environment(handScene)
                 .environment(audio)
                 .onAppear {
-                    audio.prepare()
                     tasks.audio = audio
                 }
         }
@@ -35,7 +34,6 @@ struct PhantomMirrorApp: App {
                 .environment(handScene)
                 .environment(audio)
                 .onAppear {
-                    audio.prepare()
                     tasks.audio = audio
                 }
         }

@@ -48,6 +48,7 @@ final class SkinRigAlignmentController {
     private var observedLiveLocalRotations: [String: simd_quatf] = [:]
     private var lastTrackedWorldTransforms: [HandSkeleton.JointName: simd_float4x4] = [:]
     private var skinFromARKitByModel: [[Int: simd_float4x4]] = []
+    private var forearmRootFromARKitByModel: [simd_float4x4] = []
     private var previousHandControlRotation: simd_quatf?
     private var keepFrozenPoseWhenUnbound = false
     private var manipulationSubscriptions: [any Cancellable] = []
@@ -92,8 +93,9 @@ final class SkinRigAlignmentController {
         guard !isLoaded else { return }
 
         do {
-            leftRig = try await loadRig(resource: "FirstPersonHand_Left", isLeft: true)
-            rightRig = try await loadRig(resource: "FirstPersonHand_Right", isLeft: false)
+            async let left = loadRig(resource: "FirstPersonHand_Left", isLeft: true)
+            async let right = loadRig(resource: "FirstPersonHand_Right", isLeft: false)
+            (leftRig, rightRig) = try await (left, right)
             configureDirectManipulation()
             isLoaded = true
             selectRig(isLeft: activeIsLeft)
@@ -128,7 +130,7 @@ final class SkinRigAlignmentController {
             unboundModelReferenceWorld = fixedReferenceWorld
             fixedAxesPlaced = true
         }
-        fixedCoordinateAxes.isEnabled = visible
+        fixedCoordinateAxes.isEnabled = visible && manualManipulationEnabled
         setManualManipulationEnabled(manualManipulationEnabled && visible)
 
         if isLiveTracked {
@@ -211,7 +213,7 @@ final class SkinRigAlignmentController {
             * modelAnchor.transformMatrix(relativeTo: nil)
         isBound = true
         keepFrozenPoseWhenUnbound = false
-        statusText = "Alignment confirmed for the \(activeIsLeft ? "left" : "right") hand. \(controlPointCount) tracking controls drive \(mappedJointCount) skin joints."
+        statusText = "Rigid binding confirmed for the \(activeIsLeft ? "left" : "right") hand. Wrist position is anchored and authored bone lengths are preserved."
         return true
     }
 
@@ -225,6 +227,7 @@ final class SkinRigAlignmentController {
         referenceLocalRotations.removeAll()
         lastTrackedLocalRotations.removeAll()
         skinFromARKitByModel.removeAll()
+        forearmRootFromARKitByModel.removeAll()
         bindingModelFromWrist = nil
         isBound = false
         keepFrozenPoseWhenUnbound = keepingCurrentPose
@@ -235,7 +238,29 @@ final class SkinRigAlignmentController {
 
     func setVisible(_ visible: Bool) {
         root.isEnabled = visible
-        fixedCoordinateAxes.isEnabled = visible
+        // The coordinate reference belongs only to the skin alignment tool.
+        fixedCoordinateAxes.isEnabled = false
+    }
+
+    func resetForNewTrackingSession() {
+        fixedAxesPlaced = false
+        fixedReferenceWorld = matrix_identity_float4x4
+        unboundModelReferenceWorld = matrix_identity_float4x4
+        bindingModelFromWrist = nil
+        referenceLocalRotations.removeAll()
+        lastTrackedLocalRotations.removeAll()
+        observedLiveLocalRotations.removeAll()
+        lastTrackedWorldTransforms.removeAll()
+        skinFromARKitByModel.removeAll()
+        forearmRootFromARKitByModel.removeAll()
+        previousHandControlRotation = nil
+        isBound = false
+        keepFrozenPoseWhenUnbound = false
+        restoreRestPose()
+        setVisible(false)
+        if isLoaded {
+            statusText = "Ready for a new tracking session."
+        }
     }
 
     private func loadRig(resource: String, isLeft: Bool) async throws -> LoadedRig {
@@ -300,6 +325,7 @@ final class SkinRigAlignmentController {
         observedLiveLocalRotations.removeAll()
         lastTrackedWorldTransforms.removeAll()
         skinFromARKitByModel.removeAll()
+        forearmRootFromARKitByModel.removeAll()
         previousHandControlRotation = nil
         isBound = false
         keepFrozenPoseWhenUnbound = false
@@ -335,11 +361,13 @@ final class SkinRigAlignmentController {
 
     private func driveSkin(from worldTransforms: [HandSkeleton.JointName: simd_float4x4]) {
         guard let rig = activeRig,
-              skinFromARKitByModel.count == rig.models.count else { return }
+              skinFromARKitByModel.count == rig.models.count,
+              forearmRootFromARKitByModel.count == rig.models.count else { return }
 
         for (joint, world) in worldTransforms {
             lastTrackedWorldTransforms[joint] = world
         }
+        let forearmControlWorld = handControlFrame(in: worldTransforms)
 
         for modelIndex in rig.models.indices {
             let model = rig.models[modelIndex]
@@ -347,7 +375,6 @@ final class SkinRigAlignmentController {
             let parents = rig.jointParentIndices[modelIndex]
             let bindings = skinFromARKitByModel[modelIndex]
             guard rest.count == model.jointTransforms.count else { continue }
-            let previousTransforms = model.jointTransforms
             var transforms = rest
 
             var desiredWorldBySkinIndex: [Int: simd_float4x4] = [:]
@@ -358,56 +385,52 @@ final class SkinRigAlignmentController {
                 desiredWorldBySkinIndex[row.skinIndex] = arkitWorld * skinFromARKit
             }
 
-            let currentGlobals = Self.jointWorldMatrices(
+            alignRigidForearmAtWrist(
+                transforms: &transforms,
                 model: model,
-                localTransforms: model.jointTransforms,
-                parentIndices: parents
+                parentIndices: parents,
+                worldTransforms: worldTransforms,
+                forearmControlWorld: forearmControlWorld,
+                forearmRootFromARKit: forearmRootFromARKitByModel[modelIndex]
             )
+
+            // Mapping rows follow the USD hierarchy order. Resolve each joint
+            // against the model parent's actual solved world transform (including
+            // authored/model scale), then use that result for the next child.
             for row in rig.mappingRows {
-                guard row.arkitJoint != .wrist,
-                      row.skinIndex < transforms.count,
+                guard row.skinIndex < transforms.count,
                       let desiredWorld = desiredWorldBySkinIndex[row.skinIndex] else { continue }
 
+                let solvedGlobals = Self.jointWorldMatrices(
+                    model: model,
+                    localTransforms: transforms,
+                    parentIndices: parents
+                )
                 let parentWorld: simd_float4x4
                 if let parentIndex = parents[row.skinIndex] {
-                    parentWorld = desiredWorldBySkinIndex[parentIndex]
-                        ?? currentGlobals[parentIndex]
+                    parentWorld = solvedGlobals[parentIndex]
                 } else {
                     parentWorld = model.transformMatrix(relativeTo: nil)
                 }
                 let desiredLocal = Transform(matrix: simd_inverse(parentWorld) * desiredWorld)
-                let restTranslation = rest[row.skinIndex].translation
-                let translationDelta = desiredLocal.translation - restTranslation
-                let deltaLength = simd_length(translationDelta)
-                let maxStretch: Float = 0.0025
-                let limitedDelta = deltaLength > maxStretch
-                    ? translationDelta * (maxStretch / deltaLength)
-                    : translationDelta
-                transforms[row.skinIndex].translation = restTranslation + limitedDelta
-                transforms[row.skinIndex].rotation = simd_slerp(
-                    previousTransforms[row.skinIndex].rotation,
-                    desiredLocal.rotation,
-                    0.35
-                )
+                // Keep every authored bone length and palm proportion. Only the
+                // wrist root is position-anchored; descendants receive rotation.
+                transforms[row.skinIndex].rotation = desiredLocal.rotation
             }
-            bendForearmTowardControlPoints(
-                transforms: &transforms,
-                model: model,
-                parentIndices: parents,
-                worldTransforms: worldTransforms
-            )
             model.jointTransforms = transforms
         }
     }
 
-    private func bendForearmTowardControlPoints(
+    private func alignRigidForearmAtWrist(
         transforms: inout [Transform],
         model: ModelEntity,
         parentIndices: [Int?],
-        worldTransforms: [HandSkeleton.JointName: simd_float4x4]
+        worldTransforms: [HandSkeleton.JointName: simd_float4x4],
+        forearmControlWorld: simd_float4x4?,
+        forearmRootFromARKit: simd_float4x4
     ) {
-        guard let forearmWrist = worldTransforms[.forearmWrist],
-              let forearmArm = worldTransforms[.forearmArm] else { return }
+        guard let forearmControlWorld,
+              let wristTarget = worldTransforms[.wrist] else { return }
 
         guard let (rootIndex, wristIndex) = Self.forearmJointIndices(in: model.jointNames),
               rootIndex < transforms.count,
@@ -419,23 +442,7 @@ final class SkinRigAlignmentController {
             localTransforms: transforms,
             parentIndices: parentIndices
         )
-        let rootWorld = globals[rootIndex]
-        let lockedWristWorld = globals[wristIndex]
-        let currentDirection = rootWorld.translation - lockedWristWorld.translation
-        let targetDirection = forearmArm.translation - forearmWrist.translation
-        guard simd_length_squared(currentDirection) > 0.000001,
-              simd_length_squared(targetDirection) > 0.000001 else { return }
-
-        let correction = simd_quatf(
-            from: simd_normalize(currentDirection),
-            to: simd_normalize(targetDirection)
-        )
-        let wristPosition = lockedWristWorld.translation
-        var toPivot = matrix_identity_float4x4
-        toPivot.columns.3 = SIMD4(wristPosition, 1)
-        var fromPivot = matrix_identity_float4x4
-        fromPivot.columns.3 = SIMD4(-wristPosition, 1)
-        let correctedRootWorld = toPivot * simd_float4x4(correction) * fromPivot * rootWorld
+        let correctedRootWorld = forearmControlWorld * forearmRootFromARKit
 
         let rootParentWorld: simd_float4x4
         if let parentIndex = parentIndices[rootIndex] {
@@ -443,14 +450,35 @@ final class SkinRigAlignmentController {
         } else {
             rootParentWorld = model.transformMatrix(relativeTo: nil)
         }
-        transforms[rootIndex] = Transform(
+        let desiredRootLocal = Transform(
             matrix: simd_inverse(rootParentWorld) * correctedRootWorld
         )
-        // Counter-rotate at the wrist so the palm and every finger preserve the
-        // exact world pose established during manual alignment.
-        transforms[wristIndex] = Transform(
-            matrix: simd_inverse(correctedRootWorld) * lockedWristWorld
+        transforms[rootIndex].rotation = desiredRootLocal.rotation
+
+        // Translate the whole authored forearm so its wrist joint lands on the
+        // tracked wrist. The root-to-wrist vector itself remains unchanged.
+        let wristInRootParent4 = (
+            simd_inverse(rootParentWorld) * SIMD4(wristTarget.translation, 1)
         )
+        let wristInRootParent = SIMD3(
+            wristInRootParent4.x,
+            wristInRootParent4.y,
+            wristInRootParent4.z
+        )
+        let rootWithoutTranslation = Transform(
+            scale: transforms[rootIndex].scale,
+            rotation: transforms[rootIndex].rotation,
+            translation: .zero
+        ).matrix
+        let authoredRootToWrist4 = (
+            rootWithoutTranslation * SIMD4(transforms[wristIndex].translation, 1)
+        )
+        let authoredRootToWrist = SIMD3(
+            authoredRootToWrist4.x,
+            authoredRootToWrist4.y,
+            authoredRootToWrist4.z
+        )
+        transforms[rootIndex].translation = wristInRootParent - authoredRootToWrist
     }
 
     private static func jointIndex(named leafName: String, in names: [String]) -> Int? {
@@ -476,6 +504,10 @@ final class SkinRigAlignmentController {
     ) -> Bool {
         guard let rig = activeRig else { return false }
         var allBindings: [[Int: simd_float4x4]] = []
+        var forearmBindings: [simd_float4x4] = []
+        guard let forearmControlWorld = handControlFrame(in: referenceWorld) else {
+            return false
+        }
 
         for modelIndex in rig.models.indices {
             let model = rig.models[modelIndex]
@@ -490,13 +522,38 @@ final class SkinRigAlignmentController {
                       row.skinIndex < globals.count,
                       let arkitWorld = referenceWorld[joint]
                         ?? lastTrackedWorldTransforms[joint] else { return false }
-                bindings[row.skinIndex] = simd_inverse(arkitWorld) * globals[row.skinIndex]
+                // Translation stays at zero for positional snapping. Rotation
+                // stores the per-joint basis conversion between ARKit's axes and
+                // the authored skin bone axes, preventing twisted fingers.
+                bindings[row.skinIndex] = Self.rotationBasisBinding(
+                    arkitWorld: arkitWorld,
+                    skinWorld: globals[row.skinIndex]
+                )
             }
+            guard let (rootIndex, _) = Self.forearmJointIndices(in: model.jointNames),
+                  rootIndex < globals.count,
+                  referenceWorld[.forearmArm] != nil
+                    || lastTrackedWorldTransforms[.forearmArm] != nil else { return false }
+            forearmBindings.append(Self.rotationBasisBinding(
+                arkitWorld: forearmControlWorld,
+                skinWorld: globals[rootIndex]
+            ))
             allBindings.append(bindings)
         }
 
         skinFromARKitByModel = allBindings
+        forearmRootFromARKitByModel = forearmBindings
         return true
+    }
+
+    private static func rotationBasisBinding(
+        arkitWorld: simd_float4x4,
+        skinWorld: simd_float4x4
+    ) -> simd_float4x4 {
+        let arkitRotation = simd_normalize(Transform(matrix: arkitWorld).rotation)
+        let skinRotation = simd_normalize(Transform(matrix: skinWorld).rotation)
+        let basis = simd_normalize(arkitRotation.inverse * skinRotation)
+        return simd_float4x4(basis)
     }
 
     private func rememberLiveRotations(
@@ -732,16 +789,9 @@ final class SkinRigAlignmentController {
     private static func rawHandControlFrame(
         in world: [HandSkeleton.JointName: simd_float4x4]
     ) -> simd_float4x4? {
-        guard let wrist = world[.wrist] else { return nil }
-        var forearmAxis: SIMD3<Float>
-        if let forearmWrist = world[.forearmWrist],
-           let forearmArm = world[.forearmArm] {
-            forearmAxis = forearmWrist.translation - forearmArm.translation
-        } else if let armPoint = world[.forearmArm] ?? world[.forearmWrist] {
-            forearmAxis = wrist.translation - armPoint.translation
-        } else {
-            return wrist
-        }
+        guard let wrist = world[.wrist],
+              let forearmArm = world[.forearmArm] else { return nil }
+        var forearmAxis = wrist.translation - forearmArm.translation
         guard simd_length_squared(forearmAxis) > 0.000001 else { return wrist }
         forearmAxis = simd_normalize(forearmAxis)
         let handAxis = forearmAxis
@@ -771,7 +821,7 @@ final class SkinRigAlignmentController {
             SIMD4(across, 0),
             SIMD4(handAxis, 0),
             SIMD4(normal, 0),
-            wrist.columns.3
+            forearmArm.columns.3
         ))
     }
 
